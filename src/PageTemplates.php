@@ -6,6 +6,7 @@ use Craft;
 use craft\base\Plugin as BasePlugin;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\services\UserPermissions;
+use webdna\pagetemplates\services\Access;
 use webdna\pagetemplates\services\Snapshots;
 use webdna\pagetemplates\services\Templates;
 use yii\base\Event;
@@ -14,6 +15,7 @@ use yii\base\Event;
  * Page Templates plugin
  *
  * @method static PageTemplates getInstance()
+ * @property-read Access $access
  * @property-read Snapshots $snapshots
  * @property-read Templates $templates
  * @author WebDNA <sam@webdna.co.uk>
@@ -60,6 +62,9 @@ class PageTemplates extends BasePlugin
                 'snapshots' => ['class' => Snapshots::class],
                 // Storage, and answering which templates apply where. Knows nothing about users.
                 'templates' => ['class' => Templates::class],
+                // Who may do what. Kept out of the controllers so the rules are testable, and out
+                // of Templates so that stays free of request context.
+                'access' => ['class' => Access::class],
             ],
         ];
     }
