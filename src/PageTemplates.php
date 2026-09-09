@@ -5,12 +5,14 @@ namespace webdna\pagetemplates;
 use Craft;
 use craft\base\Plugin as BasePlugin;
 use webdna\pagetemplates\services\Snapshots;
+use webdna\pagetemplates\services\Templates;
 
 /**
  * Page Templates plugin
  *
  * @method static PageTemplates getInstance()
  * @property-read Snapshots $snapshots
+ * @property-read Templates $templates
  * @author WebDNA <sam@webdna.co.uk>
  * @copyright WebDNA
  * @license https://craftcms.github.io/license/ Craft License
@@ -39,6 +41,8 @@ class PageTemplates extends BasePlugin
                 // Pure transforms over serialized field values. Deliberately free of any
                 // dependency on a booted Craft application so it stays unit-testable.
                 'snapshots' => ['class' => Snapshots::class],
+                // Storage, and answering which templates apply where. Knows nothing about users.
+                'templates' => ['class' => Templates::class],
             ],
         ];
     }
