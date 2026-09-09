@@ -1,0 +1,52 @@
+{
+    "name": "webdna/page-templates",
+    "description": "Save a built page as a reusable template, and start future pages from it.",
+    "type": "craft-plugin",
+    "license": "proprietary",
+    "support": {
+        "email": "sam@webdna.co.uk"
+    },
+    "require": {
+        "php": ">=8.2",
+        "craftcms/cms": "^5.11.0"
+    },
+    "require-dev": {
+        "codeception/codeception": "^5.2.0",
+        "codeception/module-asserts": "^3.0.0",
+        "craftcms/ecs": "dev-main",
+        "craftcms/phpstan": "dev-main"
+    },
+    "autoload": {
+        "psr-4": {
+            "webdna\\pagetemplates\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "webdna\\pagetemplates\\tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "handle": "page-templates",
+        "name": "Page Templates",
+        "developer": "WebDNA",
+        "documentationUrl": "",
+        "class": "webdna\\pagetemplates\\PageTemplates"
+    },
+    "scripts": {
+        "check-cs": "ecs check --ansi",
+        "fix-cs": "ecs check --ansi --fix",
+        "phpstan": "phpstan --memory-limit=1G",
+        "test": "codecept run"
+    },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2"
+        },
+        "allow-plugins": {
+            "craftcms/plugin-installer": true,
+            "yiisoft/yii2-composer": true
+        }
+    }
+}

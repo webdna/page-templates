@@ -1,0 +1,16 @@
+# Unit suite only for now. The integration suite (engine spec task 4.4) is added once
+# reproduction exists and needs Craft's own craft\test\Craft module.
+#
+# Run from the project root, using the root vendor binary so the plugin does not need its
+# own 130MB copy of Craft installed:
+#   ddev exec "vendor/bin/codecept run unit -c plugins/page-templates"
+paths:
+    tests: tests
+    output: tests/_output
+    support: tests/_support
+    data: tests/_data
+actor_suffix: Tester
+bootstrap: _bootstrap.php
+settings:
+    shuffle: false
+    lint: true
