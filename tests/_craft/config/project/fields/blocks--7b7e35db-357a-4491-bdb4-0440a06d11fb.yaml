@@ -1,0 +1,36 @@
+columnSuffix: null
+handle: blocks
+instructions: 'Three block types, one of which nests another Matrix.'
+name: Blocks
+searchable: false
+settings:
+  createButtonLabel: null
+  defaultIndexViewMode: cards
+  enableVersioning: false
+  entryTypes:
+    -
+      __assoc__:
+        -
+          - uid
+          - bbba391b-74b7-4ee3-b105-b95350d0fa76 # Text Block
+    -
+      __assoc__:
+        -
+          - uid
+          - 6830ad0e-1181-4491-8e5c-049096176f95 # Image Block
+    -
+      __assoc__:
+        -
+          - uid
+          - 76c03d14-db7c-47d0-ab9a-33f72b77a3cd # Columns Block
+  includeTableView: false
+  maxEntries: null
+  minEntries: null
+  pageSize: null
+  propagationKeyFormat: null
+  propagationMethod: all
+  showCardsInGrid: false
+  viewMode: blocks
+translationKeyFormat: null
+translationMethod: site
+type: craft\fields\Matrix

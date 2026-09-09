@@ -1,0 +1,21 @@
+defaultPlacement: end
+enableVersioning: true
+entryTypes:
+  -
+    uid: a2322e5f-c2cc-4890-b11f-6eea652f6135 # Article
+handle: news
+maxAuthors: 1
+minAuthors: 1
+name: News
+previewTargets:
+  -
+    label: 'Primary entry page'
+    urlFormat: '{url}'
+propagationMethod: all
+siteSettings:
+  a40a4ee9-a167-4226-9937-9c931beb3170: # Craft
+    enabledByDefault: true
+    hasUrls: true
+    template: news/_entry
+    uriFormat: 'news/{slug}'
+type: channel

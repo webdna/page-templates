@@ -3,12 +3,15 @@
 namespace webdna\pagetemplates\services;
 
 use Craft;
+use craft\base\Element;
 use craft\elements\Entry;
 use craft\helpers\Db;
+use craft\fields\Matrix;
 use craft\helpers\Json;
 use craft\models\EntryType;
 use craft\models\Section;
 use webdna\pagetemplates\models\PageTemplate;
+use webdna\pagetemplates\models\Reproduction;
 use webdna\pagetemplates\records\PageTemplateRecord;
 use webdna\pagetemplates\records\PageTemplateSectionRecord;
 use yii\base\Component;
@@ -65,6 +68,105 @@ class Templates extends Component
         }
 
         return $template;
+    }
+
+    /**
+     * Produces a new page from a template.
+     *
+     * Mirrors Craft's own New entry flow rather than inventing one, so the result behaves in every
+     * respect like a page an editor created the ordinary way: an unpublished draft, saved with
+     * `markAsSaved: false` so an abandoned page stays out of everyone's page list (BR-8).
+     */
+    public function reproduce(
+        PageTemplate $template,
+        Section $section,
+        ?int $siteId = null,
+        ?int $authorId = null,
+    ): Reproduction {
+        $entryType = $template->getEntryType();
+
+        if ($entryType === null) {
+            throw new InvalidArgumentException(
+                "The template \"$template->name\" is unusable: the kind of page it makes no longer exists.",
+            );
+        }
+
+        // BR-17. Craft only enforces this when an entry goes live, so an unvalidated mismatch
+        // would save happily here and fail the moment somebody tried to publish it.
+        $availableUids = array_map(
+            fn(EntryType $available): string => $available->uid,
+            $section->getEntryTypes(),
+        );
+
+        if (!in_array($entryType->uid, $availableUids, true)) {
+            throw new InvalidArgumentException(sprintf(
+                '%s pages are not available in %s, so this template cannot be used there.',
+                $entryType->name,
+                $section->name,
+            ));
+        }
+
+        $prepared = $this->snapshots()->prepareForReproduction(
+            ['version' => $template->snapshotVersion, 'fields' => $template->snapshot],
+            $this->allowedBlockTypes($entryType),
+        );
+
+        $entry = new Entry();
+        $entry->sectionId = $section->id;
+        $entry->typeId = $entryType->id;
+        $entry->siteId = $siteId ?? Craft::$app->getSites()->getPrimarySite()->id;
+        // BR-9: the example page's title, slug and dates are never carried over. The title is the
+        // one thing an editor must set consciously, and every page from one template would
+        // otherwise arrive identically named.
+        $entry->setAuthorId($authorId);
+        $entry->setFieldValues($prepared['fields']);
+        $entry->setScenario(Element::SCENARIO_ESSENTIALS);
+
+        $saved = Craft::$app->getDrafts()->saveElementAsDraft(
+            $entry,
+            $authorId,
+            markAsSaved: false,
+        );
+
+        if (!$saved) {
+            throw new InvalidArgumentException(sprintf(
+                'Could not produce a page from "%s": %s',
+                $template->name,
+                Json::encode($entry->getErrors()),
+            ));
+        }
+
+        return new Reproduction($entry, $prepared['droppedBlockTypes']);
+    }
+
+    /**
+     * The entry type handles each Matrix field in this layout currently allows, at every depth.
+     *
+     * Field handles are globally unique in Craft 5, so one flat map covers all nesting levels.
+     * The isset guard also makes a self-referencing Matrix safe to walk.
+     *
+     * @param array<string, string[]> $map
+     * @return array<string, string[]>
+     */
+    private function allowedBlockTypes(EntryType $entryType, array $map = []): array
+    {
+        foreach ($entryType->getFieldLayout()->getCustomFields() as $field) {
+            if (!$field instanceof Matrix || isset($map[$field->handle])) {
+                continue;
+            }
+
+            $blockTypes = $field->getEntryTypes();
+            $map[$field->handle] = array_map(
+                fn(EntryType $blockType): string => $blockType->handle,
+                $blockTypes,
+            );
+
+            foreach ($blockTypes as $blockType) {
+                $map = $this->allowedBlockTypes($blockType, $map);
+            }
+        }
+
+        return $map;
     }
 
     public function getTemplateById(int $id): ?PageTemplate

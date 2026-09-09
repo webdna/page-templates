@@ -1,0 +1,21 @@
+defaultPlacement: end
+enableVersioning: true
+entryTypes:
+  -
+    uid: 608e5361-df4f-4c4d-bf64-c1261fe1bd23 # Page
+handle: campaigns
+maxAuthors: 1
+minAuthors: 1
+name: Campaigns
+previewTargets:
+  -
+    label: 'Primary entry page'
+    urlFormat: '{url}'
+propagationMethod: all
+siteSettings:
+  a40a4ee9-a167-4226-9937-9c931beb3170: # Craft
+    enabledByDefault: true
+    hasUrls: true
+    template: campaigns/_entry
+    uriFormat: 'campaigns/{slug}'
+type: channel

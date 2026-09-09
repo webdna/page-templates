@@ -1,0 +1,26 @@
+columnSuffix: null
+handle: columns
+instructions: 'A Matrix inside a Matrix block. This is the depth that has to survive.'
+name: Columns
+searchable: false
+settings:
+  createButtonLabel: null
+  defaultIndexViewMode: cards
+  enableVersioning: false
+  entryTypes:
+    -
+      __assoc__:
+        -
+          - uid
+          - 8b13c327-ed6e-4e0b-8e45-09ca0e9b9094 # Column
+  includeTableView: false
+  maxEntries: null
+  minEntries: null
+  pageSize: null
+  propagationKeyFormat: null
+  propagationMethod: all
+  showCardsInGrid: false
+  viewMode: blocks
+translationKeyFormat: null
+translationMethod: site
+type: craft\fields\Matrix
