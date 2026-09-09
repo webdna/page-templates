@@ -3,6 +3,7 @@
 namespace webdna\pagetemplates\tests\unit;
 
 use Codeception\Test\Unit;
+use webdna\pagetemplates\exceptions\UnsupportedSnapshotVersionException;
 use webdna\pagetemplates\services\Snapshots;
 
 /**
@@ -153,5 +154,159 @@ class SnapshotsTest extends Unit
         $snapshot = $this->snapshots->capture(['heading' => 'x'], true);
 
         $this->assertSame(Snapshots::FORMAT_VERSION, $snapshot['version']);
+    }
+
+    /**
+     * BR-27. Craft drops a block whose type a field no longer allows with no error and no log
+     * entry, so content disappears untraceably. Reproduction has to notice and say what it lost.
+     */
+    public function testPrepareDropsDisallowedBlockTypesAndReportsThem(): void
+    {
+        $prepared = $this->snapshots->prepareForReproduction([
+            'version' => Snapshots::FORMAT_VERSION,
+            'fields' => [
+                'blocks' => [
+                    'b1' => ['type' => 'textBlock', 'enabled' => true, 'fields' => ['heading' => 'Kept']],
+                    'b2' => ['type' => 'imageBlock', 'enabled' => true, 'fields' => ['heading' => 'Lost']],
+                ],
+            ],
+        ], ['blocks' => ['textBlock']]);
+
+        $this->assertSame(['b1'], array_keys($prepared['fields']['blocks']), 'the allowed block survives');
+        $this->assertSame(['imageBlock'], $prepared['droppedBlockTypes'], 'the disallowed one is named');
+    }
+
+    /**
+     * The report is shown to an editor, so it names each lost block type once rather than once per
+     * occurrence — five dropped image blocks are one problem, not five.
+     */
+    public function testPrepareReportsEachDroppedBlockTypeOnce(): void
+    {
+        $prepared = $this->snapshots->prepareForReproduction([
+            'version' => Snapshots::FORMAT_VERSION,
+            'fields' => [
+                'blocks' => [
+                    'b1' => ['type' => 'imageBlock', 'enabled' => true, 'fields' => []],
+                    'b2' => ['type' => 'imageBlock', 'enabled' => true, 'fields' => []],
+                    'b3' => ['type' => 'quoteBlock', 'enabled' => true, 'fields' => []],
+                ],
+            ],
+        ], ['blocks' => ['textBlock']]);
+
+        $this->assertSame([], $prepared['fields']['blocks'], 'nothing survives');
+        $this->assertSame(['imageBlock', 'quoteBlock'], $prepared['droppedBlockTypes']);
+    }
+
+    /**
+     * Regression guard: a block type removed from a *nested* Matrix must be caught too, not just
+     * one at the top level.
+     */
+    public function testPrepareValidatesNestedBlockTypes(): void
+    {
+        $prepared = $this->snapshots->prepareForReproduction([
+            'version' => Snapshots::FORMAT_VERSION,
+            'fields' => [
+                'blocks' => [
+                    'b1' => [
+                        'type' => 'columnsBlock',
+                        'enabled' => true,
+                        'fields' => [
+                            'columns' => [
+                                'c1' => ['type' => 'column', 'enabled' => true, 'fields' => ['heading' => 'Kept']],
+                                'c2' => ['type' => 'wideColumn', 'enabled' => true, 'fields' => ['heading' => 'Lost']],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], ['blocks' => ['columnsBlock'], 'columns' => ['column']]);
+
+        $columns = $prepared['fields']['blocks']['b1']['fields']['columns'];
+
+        $this->assertSame(['c1'], array_keys($columns), 'the allowed nested block survives');
+        $this->assertSame(['wideColumn'], $prepared['droppedBlockTypes'], 'the nested loss is reported');
+    }
+
+    /**
+     * Regression guard for the output contract: the report is empty, never absent, so a caller can
+     * distinguish "nothing was lost" from "nobody checked".
+     */
+    public function testPrepareReportsAnEmptyListWhenNothingIsDropped(): void
+    {
+        $prepared = $this->snapshots->prepareForReproduction([
+            'version' => Snapshots::FORMAT_VERSION,
+            'fields' => [
+                'heading' => 'Campaign landing page',
+                'blocks' => [
+                    'b1' => ['type' => 'textBlock', 'enabled' => true, 'fields' => ['heading' => 'Kept']],
+                ],
+            ],
+        ], ['blocks' => ['textBlock']]);
+
+        $this->assertArrayHasKey('droppedBlockTypes', $prepared);
+        $this->assertSame([], $prepared['droppedBlockTypes']);
+        $this->assertSame('Campaign landing page', $prepared['fields']['heading'], 'plain fields pass through');
+    }
+
+    /**
+     * BR-22 / TN-17. Guessing at a format it does not understand is how a template silently
+     * produces a wrong page, which is the exact failure this whole spec exists to prevent.
+     */
+    public function testPrepareRefusesASnapshotVersionFromTheFuture(): void
+    {
+        $this->expectException(UnsupportedSnapshotVersionException::class);
+
+        $this->snapshots->prepareForReproduction([
+            'version' => Snapshots::FORMAT_VERSION + 1,
+            'fields' => ['heading' => 'Written by a newer build'],
+        ], []);
+    }
+
+    /**
+     * TN-7. A snapshot with no usable version is corrupt, not merely old — there has never been a
+     * version of this format that omitted it.
+     */
+    public function testPrepareRefusesASnapshotWithNoVersion(): void
+    {
+        $this->expectException(UnsupportedSnapshotVersionException::class);
+
+        $this->snapshots->prepareForReproduction(['fields' => ['heading' => 'x']], []);
+    }
+
+    /**
+     * Matrix detection has to be narrow enough not to catch other array-valued fields. A Table
+     * field whose column is named `type` serializes to rows that look superficially like blocks;
+     * treating them as blocks would rewrite the value and corrupt it. Every real Matrix block
+     * carries `fields` as well as `type`, so requiring both is what separates them.
+     */
+    public function testStripContentDoesNotMistakeATableFieldForBlocks(): void
+    {
+        $stripped = $this->snapshots->stripContent([
+            'specs' => [
+                ['type' => 'width', 'value' => '100cm'],
+                ['type' => 'height', 'value' => '50cm'],
+            ],
+        ]);
+
+        $this->assertSame(['specs' => []], $stripped, 'a table field is emptied, not restructured');
+    }
+
+    public function testPrepareLeavesATableFieldAloneRatherThanFilteringItsRows(): void
+    {
+        $prepared = $this->snapshots->prepareForReproduction([
+            'version' => Snapshots::FORMAT_VERSION,
+            'fields' => [
+                'specs' => [
+                    ['type' => 'width', 'value' => '100cm'],
+                ],
+            ],
+        ], ['specs' => ['somethingElse']]);
+
+        $this->assertSame(
+            [['type' => 'width', 'value' => '100cm']],
+            $prepared['fields']['specs'],
+            'table rows pass through untouched, however the allowed-type map reads',
+        );
+        $this->assertSame([], $prepared['droppedBlockTypes'], 'and nothing is reported as lost');
     }
 }
