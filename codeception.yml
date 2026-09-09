@@ -1,16 +1,44 @@
-# Unit suite only for now. The integration suite (engine spec task 4.4) is added once
-# reproduction exists and needs Craft's own craft\test\Craft module.
+# Two suites, as the engine spec's section 7 describes:
 #
-# Run from the project root, using the root vendor binary so the plugin does not need its
-# own 130MB copy of Craft installed:
+#   unit         — the snapshot logic. Pure array transforms, no Craft booted.
+#   integration  — storage and reproduction against a real Craft install and real entries.
+#
+# Run from the project root, using the root vendor binary so the plugin needs no duplicate copy
+# of Craft installed:
 #   ddev exec "vendor/bin/codecept run unit -c plugins/page-templates"
+#   ddev exec "vendor/bin/codecept run integration -c plugins/page-templates"
+#
+# The integration suite runs against db_test, NOT the development database. Craft's test
+# framework runs with dbSetup.clean, which drops every table in whatever database it is handed.
+actor_suffix: Tester
 paths:
     tests: tests
     output: tests/_output
     support: tests/_support
     data: tests/_data
-actor_suffix: Tester
 bootstrap: _bootstrap.php
 settings:
     shuffle: false
     lint: true
+params:
+    - tests/.env
+modules:
+    config:
+        \craft\test\Craft:
+            configFile: 'tests/_craft/config/test.php'
+            entryUrl: 'https://craft5.ddev.site/index.php'
+            # Copied into the test install and applied, so the test database gets the same
+            # content model as the sandbox — the `page` entry type, the nested Matrix fields and
+            # the landing/campaigns/news sections that every fidelity assertion depends on.
+            # Resolved relative to the directory holding tests/.
+            projectConfig:
+                folder: '../../config/project'
+            migrations: []
+            # Each entry is an array, not a handle string — installPlugin() reads ['handle'].
+            plugins:
+                - handle: page-templates
+            cleanup: true
+            transaction: true
+            dbSetup:
+                clean: true
+                setupCraft: true
