@@ -281,6 +281,12 @@ class PageTemplates extends BasePlugin
 
         $view = Craft::$app->getView();
         $view->registerAssetBundle(EntryIndexAsset::class);
+        $this->registerJsTranslations([
+            'All templates…',
+            'Couldn’t create a page from that template.',
+            'From template',
+            'New entry, choose a template',
+        ]);
         $view->registerJs(sprintf(
             'Craft.PageTemplates = Object.assign(Craft.PageTemplates || {}, %s);',
             Json::encode([
@@ -291,6 +297,20 @@ class PageTemplates extends BasePlugin
                     : null,
             ]),
         ), View::POS_BEGIN);
+    }
+
+
+    /**
+     * Makes a bundle's strings available to Craft.t() in the browser.
+     *
+     * Without this, JavaScript falls back to the English key on a translated site — and it fails
+     * silently, so it would look fine on the site it was built on and wrong on the client's.
+     *
+     * @param string[] $messages
+     */
+    private function registerJsTranslations(array $messages): void
+    {
+        Craft::$app->getView()->registerTranslations('page-templates', $messages);
     }
 
     private function addSaveAsTemplateItem(DefineMenuItemsEvent $event): void
@@ -324,6 +344,16 @@ class PageTemplates extends BasePlugin
 
         $view = Craft::$app->getView();
         $view->registerAssetBundle(EntryEditAsset::class);
+        $this->registerJsTranslations([
+            'Couldn’t save the template.',
+            'Description',
+            'Include this page’s content',
+            'Leave this off for a skeleton: the blocks arrive in the same order with every field empty.',
+            'Name',
+            'Save as a page template',
+            'Save template',
+            'This page is not changed. The template starts out usable only in the area this page belongs to.',
+        ]);
 
         $itemId = sprintf('page-templates-save-%s', mt_rand());
 

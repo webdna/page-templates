@@ -20,6 +20,21 @@
   read is refused rather than guessed at, and a corrupt snapshot is reported as unreadable
   while remaining listable and deletable.
 
+- **Save as a page template** on a page's own actions menu, with a dialogue for the name,
+  description and whether the template carries content.
+- Templates offered from Craft's existing **New entry** button, filtered to the templates that
+  apply to that area and that the editor may use. The button is left exactly as Craft builds it
+  when no template applies.
+- A **Page Templates** control-panel section for renaming, reordering, re-scoping and deleting
+  templates, with an empty state that explains the feature.
+- A warning on any page that is not a complete reproduction of its template, naming the block types
+  that could not be placed and the fields that arrived empty.
+- Two permissions, both off by default: one to save templates, one (Craft's own plugin-access
+  permission) to manage the list. Using a template needs neither.
+- Every user-facing string translatable, including those in JavaScript.
+
 ### Notes
-- No editor-facing screens yet: permissions, the save action, the management section and
-  the New entry button integration are the second half of the work.
+- Managing templates is gated by Craft's own plugin-access permission rather than a second custom
+  one, so there is a single tickbox rather than two that must agree.
+- Saving a template from a page authored by someone else also requires Craft's `savePeerEntries`
+  permission for that section.

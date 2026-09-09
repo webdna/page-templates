@@ -24,6 +24,46 @@ block skeleton and nothing else — every field arrives empty.
 A template is bound to the kind of page it was captured from, and carries a list of areas of the
 site it may be used in, which starts as just the area the original page lived in.
 
+## Using it
+
+**Saving a template.** Open a page you are happy with and choose **Save as a page template** from
+its own actions menu — the same menu holding Duplicate and Delete. Name it, and decide whether it
+carries the page's content or just its layout. The page itself is not changed.
+
+A new template is usable **only in the area the original page belonged to**. Widening it is a
+curator's decision, made in the Page Templates section.
+
+**Using one.** Create a page as you normally would. The **New entry** button gains a *From template*
+group listing the templates available for that area. Pick one and you land on a new, unsaved page,
+already assembled — give it a title and save.
+
+If any part of the template could not be reproduced, the new page says so and names what is missing,
+before you save. A page that is not a complete copy never looks like one.
+
+**Curating.** The **Page Templates** section lists every template with its state, and is where you
+rename them, order them (the order editors see in the button), widen where they may be used, and
+delete ones that have served their purpose. Deleting a template never affects pages already made
+from it.
+
+## Permissions
+
+Three capabilities, deliberately separate:
+
+| To… | You need |
+|---|---|
+| Save a page as a template | **Save a page as a template**, plus permission to edit that page |
+| Manage the template list | **Page Templates** under plugin access — Craft's own section permission |
+| *Use* a template | nothing extra: if you can create a page in an area, you can start it from a template |
+
+Both plugin permissions are off by default.
+
+> **The most common misconfiguration:** granting *Save a page as a template* alone. Craft
+> distinguishes a user's own entries from other people's, so an editor also needs
+> `savePeerEntries` for a section before they can capture a colleague's page there. Without it the
+> menu item simply will not appear on most pages.
+
+Permission behaviour requires Craft Pro. On Solo, `User::can()` returns true for everything.
+
 ## Console commands
 
 The engine is fully usable without any control-panel screen, which is also how it is tested and
@@ -55,6 +95,12 @@ ddev exec "vendor/bin/codecept run -c plugins/page-templates"
 
 **The integration suite runs against a separate `db_test` database, never the development one** —
 Craft's test framework drops every table in whatever database it is handed.
+
+## Manual test plans
+
+`test-plans/` in the host project holds runnable QA checklists for the control-panel journeys —
+creating from a template, saving one, managing the list, permissions, and plugin integrity. Each
+declares what it `covers:`, so `/craft-update` can recommend which to re-run after an update.
 
 ## Requirements
 
