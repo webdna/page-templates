@@ -150,11 +150,25 @@ class TemplatesController extends Controller
         }
 
         $this->stdout("Created page #{$result->entry->id} from \"$template->name\"\n", Console::FG_GREEN);
-        $this->stdout('  edit:              ' . $result->entry->getCpEditUrl() . "\n");
+        $this->stdout('  edit:               ' . $result->entry->getCpEditUrl() . "\n");
+
+        // Both lists print even when empty: a caller has to be able to tell "nothing was lost"
+        // from "nobody checked".
         $this->stdout(
-            '  unplaceable blocks: ' . ($result->isFaithful() ? 'none' : implode(', ', $result->droppedBlockTypes)) . "\n",
-            $result->isFaithful() ? Console::FG_GREY : Console::FG_YELLOW,
+            '  unplaceable blocks: ' . ($result->droppedBlockTypes === [] ? 'none' : implode(', ', $result->droppedBlockTypes)) . "\n",
+            $result->droppedBlockTypes === [] ? Console::FG_GREY : Console::FG_YELLOW,
         );
+        $this->stdout(
+            '  emptied fields:     ' . ($result->emptiedFields === [] ? 'none' : implode(', ', $result->emptiedFields)) . "\n",
+            $result->emptiedFields === [] ? Console::FG_GREY : Console::FG_YELLOW,
+        );
+
+        if (!$result->isFaithful()) {
+            $this->stdout(
+                "\n  This page is not a complete reproduction of the template.\n",
+                Console::FG_YELLOW,
+            );
+        }
 
         return ExitCode::OK;
     }
@@ -191,8 +205,12 @@ class TemplatesController extends Controller
 
             // Reported as a distinct value rather than as prose, so a caller can act on it.
             $state = match (true) {
+                !$template->snapshotDecoded => 'unreadable (stored snapshot is not valid JSON)',
+                !$template->getIsReadable() => sprintf(
+                    'unreadable (snapshot format %d is newer than this build)',
+                    $template->snapshotVersion,
+                ),
                 $entryType === null => 'unusable (page kind deleted)',
-                $template->snapshotVersion > 1 => 'unreadable (snapshot format too new)',
                 default => 'usable',
             };
 

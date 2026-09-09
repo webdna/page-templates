@@ -4,6 +4,7 @@ namespace webdna\pagetemplates\tests\integration;
 
 use Codeception\Test\Unit;
 use Craft;
+use craft\db\Query;
 use craft\elements\Entry;
 use craft\elements\User;
 use webdna\pagetemplates\PageTemplates;
@@ -134,7 +135,7 @@ class ReproduceTest extends Unit
         $template = $service->captureFromEntry($source, 'Campaign LP', null, true);
         $result = $service->reproduce($template, $landing, null, $this->authorId());
 
-        $this->assertTrue($result->isFaithful(), 'nothing was reported as unplaceable');
+        $this->assertTrue($result->isFaithful(), 'nothing was reported as lost');
         $this->assertSame('Campaign landing page', $result->entry->heading, 'plain fields carry over');
 
         // Top-level blocks: same types, same order, same count.
@@ -287,5 +288,85 @@ class ReproduceTest extends Unit
         $this->assertNotNull($reloaded, 'the page outlives the template');
         $this->assertSame('Survives', $reloaded->heading);
         $this->assertCount(1, $reloaded->blocks->all(), 'with its blocks intact');
+    }
+
+    /**
+     * AC-4. Independence in both directions: editing a page produced from a template changes
+     * neither the template nor the example page it was captured from.
+     */
+    public function testEditingAProducedPageChangesNeitherTheTemplateNorTheExamplePage(): void
+    {
+        $service = PageTemplates::getInstance()->templates;
+        $landing = Craft::$app->getEntries()->getSectionByHandle('landing');
+
+        $source = $this->page('Independence source', [
+            'heading' => 'Original heading',
+            'blocks' => [
+                'b1' => ['type' => 'textBlock', 'enabled' => true, 'fields' => ['heading' => 'Block A']],
+                'b2' => ['type' => 'textBlock', 'enabled' => true, 'fields' => ['heading' => 'Block B']],
+            ],
+        ]);
+        $template = $service->captureFromEntry($source, 'Independence', null, true);
+
+        $produced = $service->reproduce($template, $landing, null, $this->authorId())->entry;
+
+        // Edit the produced page hard: change a value and remove a block entirely.
+        $produced->title = 'Now edited';
+        $produced->setFieldValues([
+            'heading' => 'Changed heading',
+            'blocks' => [
+                'keep' => ['type' => 'textBlock', 'enabled' => true, 'fields' => ['heading' => 'Only one left']],
+            ],
+        ]);
+        Craft::$app->getElements()->saveElement($produced);
+
+        $reloadedSource = Entry::find()->id($source->id)->status(null)->one();
+        $reloadedTemplate = $service->getTemplateById($template->id);
+
+        $this->assertSame('Original heading', $reloadedSource->heading, 'the example page is untouched');
+        $this->assertCount(2, $reloadedSource->blocks->all(), 'including its block count');
+        $this->assertSame(
+            ['Block A', 'Block B'],
+            array_map(fn($b) => $b->heading, $reloadedSource->blocks->all()),
+        );
+
+        $this->assertCount(2, $reloadedTemplate->snapshot['blocks'], 'and the template still holds both blocks');
+
+        // And a second reproduction still comes from the original snapshot.
+        $second = $service->reproduce($reloadedTemplate, $landing, null, $this->authorId())->entry;
+
+        $this->assertSame(
+            ['Block A', 'Block B'],
+            array_map(fn($b) => $b->heading, $second->blocks->all()),
+            'a later reproduction is unaffected by edits to an earlier one',
+        );
+    }
+
+    /**
+     * AC-5. Templates are plugin data, not pages. They are not elements at all, so they cannot
+     * appear in a page list, an element picker, a search result or a feed — which is the whole
+     * reason for storing them outside the entries table.
+     */
+    public function testATemplateIsNeverAPage(): void
+    {
+        $service = PageTemplates::getInstance()->templates;
+
+        $template = $service->captureFromEntry($this->page('Not a page source'), 'Distinctive Name', null, true);
+
+        $this->assertSame(
+            0,
+            (int)Entry::find()->title('Distinctive Name')->status(null)->drafts(null)->count(),
+            'no page exists carrying the template\'s name',
+        );
+
+        $this->assertSame(
+            0,
+            (int)(new Query())
+                ->from(['{{%elements}}'])
+                ->where(['id' => $template->id, 'type' => Entry::class])
+                ->andWhere(['dateDeleted' => null])
+                ->count(),
+            'and a template id is not an element id in disguise',
+        );
     }
 }

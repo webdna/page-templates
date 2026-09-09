@@ -98,6 +98,15 @@ class PageTemplate extends Model
     }
 
     /**
+     * Set false when the stored snapshot could not be decoded at all.
+     *
+     * A corrupt snapshot must not stop a template being listed or deleted — a curator has to be
+     * able to clear it up — so the storage layer records the failure here rather than throwing
+     * while loading.
+     */
+    public bool $snapshotDecoded = true;
+
+    /**
      * Whether this template can currently produce a page at all.
      *
      * Derived, never stored: it depends on whether the entry type still exists, which changes
@@ -105,7 +114,16 @@ class PageTemplate extends Model
      */
     public function getIsUsable(): bool
     {
-        return $this->getEntryType() !== null;
+        return $this->getEntryType() !== null && $this->getIsReadable();
+    }
+
+    /**
+     * Whether this build can read the stored snapshot: it decoded, and its format is one this
+     * build understands (BR-22).
+     */
+    public function getIsReadable(): bool
+    {
+        return $this->snapshotDecoded && $this->snapshotVersion <= Snapshots::FORMAT_VERSION;
     }
 
     /**

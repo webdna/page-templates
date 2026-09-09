@@ -10,6 +10,7 @@ use craft\fields\Matrix;
 use craft\helpers\Json;
 use craft\models\EntryType;
 use craft\models\Section;
+use webdna\pagetemplates\exceptions\UnsupportedSnapshotVersionException;
 use webdna\pagetemplates\models\PageTemplate;
 use webdna\pagetemplates\models\Reproduction;
 use webdna\pagetemplates\records\PageTemplateRecord;
@@ -106,6 +107,20 @@ class Templates extends Component
             ));
         }
 
+        if (!$template->getIsReadable()) {
+            throw new UnsupportedSnapshotVersionException(sprintf(
+                'The template "%s" cannot be read: %s.',
+                $template->name,
+                $template->snapshotDecoded
+                    ? sprintf(
+                        'it was written in snapshot format %d, and this build understands up to %d',
+                        $template->snapshotVersion,
+                        Snapshots::FORMAT_VERSION,
+                    )
+                    : 'its stored snapshot is not valid JSON',
+            ));
+        }
+
         $prepared = $this->snapshots()->prepareForReproduction(
             ['version' => $template->snapshotVersion, 'fields' => $template->snapshot],
             $this->allowedBlockTypes($entryType),
@@ -136,7 +151,99 @@ class Templates extends Component
             ));
         }
 
-        return new Reproduction($entry, $prepared['droppedBlockTypes']);
+        return new Reproduction(
+            $entry,
+            $prepared['droppedBlockTypes'],
+            $this->emptiedFields($prepared['fields'], $entry),
+        );
+    }
+
+    /**
+     * Field handles that held content in the snapshot but arrived empty on the page (BR-28).
+     *
+     * The design assumed a field's serialized form always feeds back through its own
+     * normalisation, since that is the shape the control panel posts. That is true of Craft's own
+     * field types and **not** universally true of third-party ones: ImageShop, for instance,
+     * serializes to an array of arrays but normalises only Models or a JSON string, so its value
+     * does not survive the round trip.
+     *
+     * Rather than maintain a list of known-lossy field types, this compares what was asked for
+     * against what actually landed. It also catches a relation whose target has been deleted since
+     * capture (TN-12), which is the same class of problem: content that cannot be reproduced.
+     *
+     * @return string[]
+     */
+    private function emptiedFields(array $intendedFields, Entry $entry): array
+    {
+        $actual = $entry->getSerializedFieldValues();
+        $emptied = [];
+
+        foreach ($intendedFields as $handle => $intended) {
+            // Nothing was meant to arrive — a structure-only template, or a field that was empty
+            // on the example page.
+            if ($this->isEmptyFieldValue($intended)) {
+                continue;
+            }
+
+            if ($this->isEmptyFieldValue($actual[$handle] ?? null)) {
+                $emptied[] = $handle;
+            }
+        }
+
+        return $emptied;
+    }
+
+    /**
+     * Whether a serialized field value carries no actual content.
+     *
+     * Recursive, and it has to be: some field types normalise an unset value into a populated-
+     * looking structure. ImageShop turns null into a single empty model, which serializes to an
+     * array containing an array of nulls — flatly non-empty, but holding nothing. Treating a
+     * structure whose every leaf is empty as empty is what stops this reporting a field the editor
+     * never filled in.
+     *
+     * `false` and `0` are left alone: they are real values a lightswitch or number field holds.
+     */
+    private function isEmptyFieldValue(mixed $value): bool
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return true;
+        }
+
+        // Some field types serialize to JSON, and a JSON-encoded null or empty structure carries
+        // no content however non-empty the string looks. ImageShop's unset value serializes to the
+        // four-character string "null", which is what made this necessary. The cost is that a
+        // plain-text field containing literally `null` reads as empty here; that is a fair trade
+        // against reporting a field the editor never filled in.
+        if (is_string($value)) {
+            $trimmed = trim($value);
+
+            if ($trimmed === 'null') {
+                return true;
+            }
+
+            if (Json::isJsonObject($trimmed)) {
+                try {
+                    return $this->isEmptyFieldValue(Json::decode($trimmed));
+                } catch (\Throwable) {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        if (!is_array($value)) {
+            return false;
+        }
+
+        foreach ($value as $item) {
+            if (!$this->isEmptyFieldValue($item)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -226,8 +333,17 @@ class Templates extends Component
         $template->description = $record->description;
         $template->entryTypeUid = $record->entryTypeUid;
         $template->includeContent = (bool)$record->includeContent;
-        $template->snapshot = Json::decode($record->snapshot) ?? [];
         $template->snapshotVersion = (int)$record->snapshotVersion;
+
+        // A corrupt snapshot must not stop the template being listed or deleted, so record the
+        // failure rather than letting a raw decoding error escape the storage layer. Reproduction
+        // refuses it cleanly further down.
+        try {
+            $template->snapshot = Json::decode($record->snapshot) ?? [];
+        } catch (\Throwable) {
+            $template->snapshot = [];
+            $template->snapshotDecoded = false;
+        }
         $template->sourceEntryId = $record->sourceEntryId;
         $template->sourceSiteId = $record->sourceSiteId;
         $template->sortOrder = $record->sortOrder;
@@ -237,6 +353,9 @@ class Templates extends Component
             PageTemplateSectionRecord::find()
                 ->select(['sectionUid'])
                 ->where(['templateId' => $record->id])
+                // Ordered so getAllowedSections() is stable, as the model documents. Without
+                // this the rows come back in whatever order the database chooses.
+                ->orderBy(['id' => SORT_ASC])
                 ->column(),
         );
 
