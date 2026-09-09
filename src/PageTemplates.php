@@ -12,7 +12,12 @@ use craft\events\RegisterUserPermissionsEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\services\UserPermissions;
 use craft\web\UrlManager;
+use craft\helpers\Json;
+use craft\helpers\UrlHelper;
+use craft\web\View;
 use webdna\pagetemplates\assetbundles\EntryEditAsset;
+use webdna\pagetemplates\assetbundles\EntryIndexAsset;
+use webdna\pagetemplates\controllers\CreateController;
 use webdna\pagetemplates\services\Access;
 use webdna\pagetemplates\services\Snapshots;
 use webdna\pagetemplates\services\Templates;
@@ -129,6 +134,21 @@ class PageTemplates extends BasePlugin
 
     private function attachEventHandlers(): void
     {
+        // BR-10. Craft 5 has no entry-edit content hook — the edit screen is rendered by
+        // ElementsController rather than a hookable template — so the warning is attached to the
+        // one hook every control-panel page fires, and guarded down to the page it concerns.
+        Craft::$app->getView()->hook('cp.layouts.base', function(array &$context): ?string {
+            return $this->renderIncompleteReproductionWarning();
+        });
+
+        // BR-4, BR-16. The templates each section can offer *this* user, injected on element
+        // index pages so the button has them without a round trip.
+        Craft::$app->getView()->hook('cp.layouts.elementindex', function(array &$context): ?string {
+            $this->registerEntryIndexResources();
+
+            return null;
+        });
+
         Event::on(
             UrlManager::class,
             UrlManager::EVENT_REGISTER_CP_URL_RULES,
@@ -172,6 +192,107 @@ class PageTemplates extends BasePlugin
      * The guard matters. getActionMenuItems() also feeds element chips and cards, so without it the
      * item would appear against every page in every list — Craft's own items guard the same way.
      */
+    /**
+     * Renders the incomplete-reproduction warning, if the page being viewed has one waiting.
+     *
+     * Guarded tightly: the hook fires on every control-panel page, so this checks that we are on
+     * an element edit screen for an entry that has a flash of its own. Reading the flash consumes
+     * it, so the warning is shown once and does not follow the editor around.
+     */
+    private function renderIncompleteReproductionWarning(): ?string
+    {
+        $controller = Craft::$app->controller;
+
+        if (!$controller instanceof ElementsController) {
+            return null;
+        }
+
+        $element = $controller->element ?? null;
+
+        if (!$element instanceof Entry || $element->id === null) {
+            return null;
+        }
+
+        $session = Craft::$app->getSession();
+        $key = CreateController::INCOMPLETE_FLASH_PREFIX . $element->id;
+
+        if (!$session->hasFlash($key)) {
+            return null;
+        }
+
+        return Craft::$app->getView()->renderTemplate('page-templates/_warning', [
+            'warning' => $session->getFlash($key),
+        ]);
+    }
+
+    /**
+     * The maximum templates offered for one section in the new-page button (BR-16).
+     *
+     * Past this the menu stops being usable, so it defers to the management section instead of
+     * growing without limit.
+     */
+    private const MENU_LIMIT = 25;
+
+    /**
+     * Gives the new-page button the templates it may offer, per section.
+     *
+     * Computed server-side rather than fetched, because the answer depends on permissions the
+     * browser has no business deciding, and on the section-to-page-kind mapping it does not know.
+     */
+    private function registerEntryIndexResources(): void
+    {
+        $user = Craft::$app->getUser()->getIdentity();
+
+        if ($user === null) {
+            return;
+        }
+
+        $bySection = [];
+        $truncated = [];
+
+        foreach (Craft::$app->getEntries()->getAllSections() as $section) {
+            // BR-13: using a template needs only the ability to create pages here.
+            if (!$this->access->canUseTemplatesIn($user, $section)) {
+                continue;
+            }
+
+            $templates = $this->templates->getTemplatesForSection($section);
+
+            if ($templates === []) {
+                continue;
+            }
+
+            if (count($templates) > self::MENU_LIMIT) {
+                $truncated[$section->handle] = true;
+                $templates = array_slice($templates, 0, self::MENU_LIMIT);
+            }
+
+            $bySection[$section->handle] = array_map(fn($template) => [
+                'id' => $template->id,
+                'name' => $template->name,
+            ], $templates);
+        }
+
+        // Nothing to offer anywhere: leave the button entirely alone rather than loading a script
+        // that would do nothing.
+        if ($bySection === []) {
+            return;
+        }
+
+        $view = Craft::$app->getView();
+        $view->registerAssetBundle(EntryIndexAsset::class);
+        $view->registerJs(sprintf(
+            'Craft.PageTemplates = Object.assign(Craft.PageTemplates || {}, %s);',
+            Json::encode([
+                'bySection' => $bySection,
+                'truncated' => $truncated,
+                'manageUrl' => $this->access->canManageTemplates($user)
+                    ? UrlHelper::cpUrl('page-templates')
+                    : null,
+            ]),
+        ), View::POS_BEGIN);
+    }
+
     private function addSaveAsTemplateItem(DefineMenuItemsEvent $event): void
     {
         $entry = $event->sender;
