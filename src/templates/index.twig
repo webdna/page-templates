@@ -1,0 +1,57 @@
+{% extends "_layouts/cp" %}
+{% import "_includes/forms.twig" as forms %}
+
+{% set title = "Page Templates"|t('page-templates') %}
+
+{% if templates|length %}
+    {% do view.registerAssetBundle('craft\\web\\assets\\admintable\\AdminTableAsset') %}
+{% endif %}
+
+{% block content %}
+    {% if not templates|length %}
+        {# BR: the empty state is where the feature is explained, because the new-page button stays
+           untouched until a template exists — so this is the only place an editor can learn it. #}
+        <div class="zilch" data-page-templates-empty>
+            <h2>{{ "No page templates yet"|t('page-templates') }}</h2>
+            <p>
+                {{ "A template is a page you have already built, saved so future pages can start from it instead of being reassembled by hand."|t('page-templates') }}
+            </p>
+            <p>
+                {{ "To make one, open a page you are happy with and choose {action} from its own actions menu."|t('page-templates', {
+                    action: tag('strong', { text: "Save as a page template"|t('page-templates') })
+                })|raw }}
+            </p>
+        </div>
+    {% else %}
+        <div id="page-templates-table"></div>
+    {% endif %}
+{% endblock %}
+
+{% if templates|length %}
+    {% js %}
+        (() => {
+            new Craft.VueAdminTable({
+                container: '#page-templates-table',
+                tableData: {{ tableData|json_encode|raw }},
+                columns: [
+                    { name: '__slot:title', title: Craft.t('page-templates', 'Name'), sortField: false },
+                    { name: 'pageKind', title: Craft.t('page-templates', 'Kind of page') },
+                    { name: 'content', title: Craft.t('page-templates', 'Carries') },
+                    { name: 'areas', title: Craft.t('page-templates', 'Allowed areas') },
+                    { name: 'state', title: Craft.t('page-templates', 'State') },
+                ],
+                {# Curator order is the order templates are offered in (BR-14), so the list is
+                   sortable by hand rather than by column. #}
+                {% if templates|length > 1 %}
+                reorderAction: 'page-templates/templates/reorder',
+                reorderSuccessMessage: Craft.t('page-templates', 'Templates reordered.'),
+                {% endif %}
+                deleteAction: 'page-templates/templates/delete',
+                {# Says plainly that pages already made are safe (BR-19), because the obvious fear
+                   is that deleting a template breaks everything built from it. #}
+                deleteConfirmationMessage: Craft.t('page-templates', 'Delete “{name}”? Pages already created from it are not affected.'),
+                deleteSuccessMessage: Craft.t('page-templates', 'Template deleted.'),
+            });
+        })();
+    {% endjs %}
+{% endif %}

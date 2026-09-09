@@ -9,7 +9,9 @@ use craft\controllers\ElementsController;
 use craft\elements\Entry;
 use craft\events\DefineMenuItemsEvent;
 use craft\events\RegisterUserPermissionsEvent;
+use craft\events\RegisterUrlRulesEvent;
 use craft\services\UserPermissions;
+use craft\web\UrlManager;
 use webdna\pagetemplates\assetbundles\EntryEditAsset;
 use webdna\pagetemplates\services\Access;
 use webdna\pagetemplates\services\Snapshots;
@@ -36,12 +38,22 @@ class PageTemplates extends BasePlugin
     public const PERMISSION_SAVE = 'pageTemplates:save';
 
     /**
-     * Permission to view and change the template list (BR-12). Off by default.
+     * Permission to view and change the template list (BR-12).
      *
-     * Note that *using* a template needs neither of these (BR-13): if an editor can create a page
-     * in an area, they can start it from a template.
+     * This is Craft's own automatic section-access permission, not one of ours, and deliberately
+     * so. Craft registers `accessPlugin-<handle>` for any plugin with a control-panel section and
+     * enforces it in `web/Application.php` before a controller runs. A second permission of our
+     * own alongside it would add no expressiveness — there is no useful "manage but not access",
+     * or the reverse — while creating exactly the trap BR-12 warns against: an admin who ticks
+     * only ours gets a section that is visible and then refuses them, with no explanation.
+     *
+     * Craft also hides the nav item without it (`web/twig/variables/Cp.php:299`), so "absent
+     * rather than forbidden" comes for free.
+     *
+     * *Using* a template needs neither permission (BR-13): if an editor can create a page in an
+     * area, they can start it from a template.
      */
-    public const PERMISSION_MANAGE = 'pageTemplates:manage';
+    public const PERMISSION_MANAGE = 'accessPlugin-page-templates';
 
     public string $schemaVersion = '1.0.0';
 
@@ -54,6 +66,12 @@ class PageTemplates extends BasePlugin
      * See docs/specs/2026-09-09-page-templates-editor.md.
      */
     public bool $hasCpSettings = false;
+
+    /**
+     * Templates are editor-authored content, so they get their own permission-gated section rather
+     * than a settings page. See $hasCpSettings above for why that distinction matters.
+     */
+    public bool $hasCpSection = true;
 
     /**
      * @inheritdoc
@@ -90,8 +108,36 @@ class PageTemplates extends BasePlugin
         });
     }
 
+    /**
+     * BR-12. Absent from the navigation without the manage permission, not merely unreachable: an
+     * item that is visible and then refuses you is a support call, not a security boundary.
+     */
+    public function getCpNavItem(): ?array
+    {
+        $user = Craft::$app->getUser()->getIdentity();
+
+        if ($user === null || !$this->access->canManageTemplates($user)) {
+            return null;
+        }
+
+        $item = parent::getCpNavItem();
+        $item['label'] = Craft::t('page-templates', 'Page Templates');
+        $item['icon'] = '@webdna/pagetemplates/icon.svg';
+
+        return $item;
+    }
+
     private function attachEventHandlers(): void
     {
+        Event::on(
+            UrlManager::class,
+            UrlManager::EVENT_REGISTER_CP_URL_RULES,
+            function(RegisterUrlRulesEvent $event): void {
+                $event->rules['page-templates'] = 'page-templates/templates/index';
+                $event->rules['page-templates/<templateId:\\d+>'] = 'page-templates/templates/edit';
+            },
+        );
+
         Event::on(
             Entry::class,
             Element::EVENT_DEFINE_ACTION_MENU_ITEMS,
@@ -110,9 +156,9 @@ class PageTemplates extends BasePlugin
                         self::PERMISSION_SAVE => [
                             'label' => Craft::t('page-templates', 'Save a page as a template'),
                         ],
-                        self::PERMISSION_MANAGE => [
-                            'label' => Craft::t('page-templates', 'Manage page templates'),
-                        ],
+                        // Managing the list is gated by Craft's own accessPlugin permission — see
+                        // PERMISSION_MANAGE. Registering a second one here would mean two boxes
+                        // for one capability.
                     ],
                 ];
             },

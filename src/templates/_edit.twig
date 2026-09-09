@@ -1,0 +1,75 @@
+{% extends "_layouts/cp" %}
+{% import "_includes/forms.twig" as forms %}
+
+{% set title = template.name %}
+{% set fullPageForm = true %}
+
+{% set crumbs = [
+    { label: "Page Templates"|t('page-templates'), url: url('page-templates') }
+] %}
+
+{% block content %}
+    {{ actionInput('page-templates/templates/save') }}
+    {{ redirectInput('page-templates') }}
+    {{ hiddenInput('templateId', template.id) }}
+
+    {{ forms.textField({
+        first: true,
+        label: "Name"|t('page-templates'),
+        instructions: "What editors will see in the new-page button."|t('page-templates'),
+        id: 'name',
+        name: 'name',
+        value: template.name,
+        errors: template.getErrors('name'),
+        required: true,
+        autofocus: true,
+    }) }}
+
+    {{ forms.textareaField({
+        label: "Description"|t('page-templates'),
+        instructions: "Only shown here, to help tell similar templates apart."|t('page-templates'),
+        id: 'description',
+        name: 'description',
+        value: template.description,
+        errors: template.getErrors('description'),
+        rows: 2,
+    }) }}
+
+    {% if availableSections|length %}
+        {{ forms.checkboxGroupField({
+            label: "Allowed areas"|t('page-templates'),
+            instructions: "Where this template may be used. A new template starts out allowed only in the area its original page belonged to."|t('page-templates'),
+            name: 'allowedSectionUids',
+            options: availableSections|map(section => {
+                label: section.name,
+                value: section.uid,
+            }),
+            values: template.allowedSectionUids,
+        }) }}
+
+        {% set staleCount = template.allowedSectionUids|length - template.allowedSections|length %}
+        {% if staleCount > 0 %}
+            {# Reported rather than silently tidied: an area can stop resolving because a section
+               was removed, and a curator should see that happened instead of finding a tick gone. #}
+            <p class="warning" data-page-templates-stale>
+                {{ "{count} allowed area(s) no longer exist and are ignored. Saving this template will drop them."|t('page-templates', { count: staleCount }) }}
+            </p>
+        {% endif %}
+    {% else %}
+        <p class="warning">
+            {{ "This template makes a kind of page that no longer exists, so there is nowhere it can be used. It can only be deleted."|t('page-templates') }}
+        </p>
+    {% endif %}
+
+    <hr>
+
+    {# Read-only facts about the capture. Not editable: changing what a template holds means
+       capturing again, which is deliberate — see the engine spec's Later list. #}
+    <div class="meta read-only">
+        {{ forms.field({ label: "Kind of page"|t('page-templates') }, template.entryType ? template.entryType.name : "(deleted)"|t('page-templates')) }}
+        {{ forms.field({ label: "Carries"|t('page-templates') }, template.includeContent
+            ? "Content and layout"|t('page-templates')
+            : "Layout only"|t('page-templates')) }}
+        {{ forms.field({ label: "Snapshot format"|t('page-templates') }, template.snapshotVersion) }}
+    </div>
+{% endblock %}

@@ -411,6 +411,43 @@ class Templates extends Component
     }
 
     /**
+     * Sets the order templates are offered in (BR-14).
+     *
+     * Ids that no longer resolve are skipped rather than treated as an error: a curator dragging
+     * rows while someone else deletes one should not lose the ordering they just set. The surviving
+     * rows are still numbered contiguously.
+     *
+     * @param int[] $ids in the desired order
+     */
+    public function reorderTemplates(array $ids): bool
+    {
+        $db = Craft::$app->getDb();
+        $transaction = $db->beginTransaction();
+
+        try {
+            $sortOrder = 0;
+
+            foreach ($ids as $id) {
+                $record = PageTemplateRecord::findOne((int)$id);
+
+                if ($record === null) {
+                    continue;
+                }
+
+                $record->sortOrder = ++$sortOrder;
+                $record->save(false);
+            }
+
+            $transaction->commit();
+        } catch (\Throwable $e) {
+            $transaction->rollBack();
+            throw $e;
+        }
+
+        return true;
+    }
+
+    /**
      * Deletes a template.
      *
      * Pages produced from it are untouched (BR-19), because a snapshot is a copy: nothing built
