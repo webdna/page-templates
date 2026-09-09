@@ -100,7 +100,7 @@ class Templates extends Component
 
         if (!in_array($entryType->uid, $availableUids, true)) {
             throw new InvalidArgumentException(sprintf(
-                '%s pages are not available in %s, so this template cannot be used there.',
+                'The "%s" page kind is not available in "%s", so this template cannot be used there.',
                 $entryType->name,
                 $section->name,
             ));
