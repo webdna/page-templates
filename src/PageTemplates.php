@@ -4,8 +4,11 @@ namespace webdna\pagetemplates;
 
 use Craft;
 use craft\base\Plugin as BasePlugin;
+use craft\events\RegisterUserPermissionsEvent;
+use craft\services\UserPermissions;
 use webdna\pagetemplates\services\Snapshots;
 use webdna\pagetemplates\services\Templates;
+use yii\base\Event;
 
 /**
  * Page Templates plugin
@@ -19,6 +22,20 @@ use webdna\pagetemplates\services\Templates;
  */
 class PageTemplates extends BasePlugin
 {
+    /**
+     * Permission to save a page as a template (BR-1). Off by default, so the list does not fill up
+     * with half-finished experiments before anyone has decided who should curate it.
+     */
+    public const PERMISSION_SAVE = 'pageTemplates:save';
+
+    /**
+     * Permission to view and change the template list (BR-12). Off by default.
+     *
+     * Note that *using* a template needs neither of these (BR-13): if an editor can create a page
+     * in an area, they can start it from a template.
+     */
+    public const PERMISSION_MANAGE = 'pageTemplates:manage';
+
     public string $schemaVersion = '1.0.0';
 
     /**
@@ -65,7 +82,22 @@ class PageTemplates extends BasePlugin
 
     private function attachEventHandlers(): void
     {
-        // Permissions, the control-panel section and the entry-index asset bundle are registered
-        // here by the editor spec. The engine half attaches nothing.
+        Event::on(
+            UserPermissions::class,
+            UserPermissions::EVENT_REGISTER_PERMISSIONS,
+            function(RegisterUserPermissionsEvent $event): void {
+                $event->permissions[] = [
+                    'heading' => Craft::t('page-templates', 'Page Templates'),
+                    'permissions' => [
+                        self::PERMISSION_SAVE => [
+                            'label' => Craft::t('page-templates', 'Save a page as a template'),
+                        ],
+                        self::PERMISSION_MANAGE => [
+                            'label' => Craft::t('page-templates', 'Manage page templates'),
+                        ],
+                    ],
+                ];
+            },
+        );
     }
 }
