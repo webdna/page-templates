@@ -127,8 +127,11 @@ class PageTemplates extends BasePlugin
 
         $item = parent::getCpNavItem();
         $item['label'] = Craft::t('page-templates', 'Page Templates');
-        $item['icon'] = '@webdna/pagetemplates/icon.svg';
 
+        // The icon is deliberately *not* set here. Craft's own cpNavIconPath() picks up
+        // src/icon-mask.svg from the plugin's base path, and setting a path by hand is how this
+        // went wrong before: Cp::iconSvg() returns an empty string for a path it cannot load and
+        // only logs a warning, so a wrong path renders a nav item with no icon and no error.
         return $item;
     }
 
