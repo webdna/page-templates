@@ -19,6 +19,7 @@ use webdna\pagetemplates\assetbundles\EntryEditAsset;
 use webdna\pagetemplates\assetbundles\EntryIndexAsset;
 use webdna\pagetemplates\controllers\CreateController;
 use webdna\pagetemplates\services\Access;
+use webdna\pagetemplates\services\ContentEditing;
 use webdna\pagetemplates\services\Snapshots;
 use webdna\pagetemplates\services\Templates;
 use yii\base\Event;
@@ -28,6 +29,7 @@ use yii\base\Event;
  *
  * @method static PageTemplates getInstance()
  * @property-read Access $access
+ * @property-read ContentEditing $contentEditing
  * @property-read Snapshots $snapshots
  * @property-read Templates $templates
  * @author WebDNA <sam@webdna.co.uk>
@@ -93,6 +95,10 @@ class PageTemplates extends BasePlugin
                 // Who may do what. Kept out of the controllers so the rules are testable, and out
                 // of Templates so that stays free of request context.
                 'access' => ['class' => Access::class],
+                // Editing a template's content by round-tripping it through a scratch page.
+                // Separate from Templates because it owns a lifecycle — a page that exists only
+                // while somebody is editing — rather than storage.
+                'contentEditing' => ['class' => ContentEditing::class],
             ],
         ];
     }
@@ -142,6 +148,12 @@ class PageTemplates extends BasePlugin
         // one hook every control-panel page fires, and guarded down to the page it concerns.
         Craft::$app->getView()->hook('cp.layouts.base', function(array &$context): ?string {
             return $this->renderIncompleteReproductionWarning();
+        });
+
+        // BR-31. On a scratch page, says so — and carries the only controls that save it back
+        // into the template or throw it away.
+        Craft::$app->getView()->hook('cp.layouts.base', function(array &$context): ?string {
+            return $this->renderContentEditingBanner();
         });
 
         // BR-4, BR-16. The templates each section can offer *this* user, injected on element
@@ -202,6 +214,113 @@ class PageTemplates extends BasePlugin
      * an element edit screen for an entry that has a flash of its own. Reading the flash consumes
      * it, so the warning is shown once and does not follow the editor around.
      */
+    /**
+     * The banner on a scratch page — a page that exists only so a template's content can be
+     * edited (BR-31).
+     */
+    private function renderContentEditingBanner(): ?string
+    {
+        $controller = Craft::$app->controller;
+
+        if (!$controller instanceof ElementsController) {
+            return null;
+        }
+
+        $element = $controller->element ?? null;
+
+        if (!$element instanceof Entry || $element->id === null) {
+            return null;
+        }
+
+        $record = $this->contentEditing->recordForDraft($element->id);
+
+        if ($record === null) {
+            return null;
+        }
+
+        $user = Craft::$app->getUser()->getIdentity();
+
+        // Someone without manage rights should never reach a scratch page, but if they do they
+        // get no controls: saving into a template is a curator's act (BR-32).
+        if ($user === null || !$this->access->canManageTemplates($user)) {
+            return null;
+        }
+
+        $template = $this->templates->getTemplateById($record->templateId);
+
+        if ($template === null) {
+            return null;
+        }
+
+        try {
+            $lost = Json::decode((string)$record->lostDetail) ?: [];
+        } catch (\Throwable) {
+            $lost = [];
+        }
+
+        $view = Craft::$app->getView();
+
+        $this->registerJsTranslations([
+            'Discard the changes to this template’s content? The page will be thrown away.',
+            'Something went wrong.',
+        ]);
+
+        // Registered from here rather than from a {% js %} block in the template, because a hook
+        // renders late enough that a block registered inside it can miss the page's JS output.
+        $view->registerJsWithVars(
+            fn($draftId) => <<<JS
+(() => {
+  const post = (button, action, confirmText) => {
+    if (!button) {
+      return;
+    }
+
+    button.addEventListener('click', () => {
+      if (confirmText && !window.confirm(confirmText)) {
+        return;
+      }
+
+      button.classList.add('loading');
+
+      Craft.sendActionRequest('POST', action, {data: {draftId: $draftId}})
+        .then(({data}) => {
+          window.location.href = data.redirect;
+        })
+        .catch((error) => {
+          button.classList.remove('loading');
+          Craft.cp.displayError(
+            error?.response?.data?.message ||
+            Craft.t('page-templates', 'Something went wrong.')
+          );
+        });
+    });
+  };
+
+  post(
+    document.getElementById('page-templates-save-content'),
+    'page-templates/templates/save-content'
+  );
+  post(
+    document.getElementById('page-templates-discard-content'),
+    'page-templates/templates/discard-content',
+    Craft.t('page-templates', 'Discard the changes to this template’s content? The page will be thrown away.')
+  );
+})();
+JS,
+            [(int)$element->id],
+        );
+
+        return $view->renderTemplate('page-templates/_editing', [
+            'editing' => [
+                'templateId' => $template->id,
+                'templateName' => $template->name,
+                'faithful' => (bool)$record->wasFaithful,
+                'droppedBlockTypes' => $lost['droppedBlockTypes'] ?? [],
+                'emptiedFields' => $lost['emptiedFields'] ?? [],
+            ],
+        ]);
+    }
+
     private function renderIncompleteReproductionWarning(): ?string
     {
         $controller = Craft::$app->controller;

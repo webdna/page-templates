@@ -3,6 +3,7 @@ import {
     TEST_TEMPLATE_PREFIX,
     deleteTestTemplates,
     openExamplePage,
+    openSaveDialogue,
     signIn,
 } from './helpers.js';
 
@@ -26,32 +27,7 @@ test.describe('Save as a page template', () => {
         await deleteTestTemplates(browser);
     });
 
-    async function openDialogue(page) {
-        // Craft's edit screen has several disclosure menus ("Actions", "More actions", the
-        // breadcrumb, the account menu). Rather than hard-code which one Craft currently puts
-        // element actions in — it has moved before and would move again — find the menu that
-        // actually contains the item and open its own trigger.
-        const menuId = await page.evaluate(() => {
-            const label = [...document.querySelectorAll('.menu-item-label, a, button')]
-                .find((el) => el.textContent.trim() === 'Save as a page template');
-
-            return label?.closest('.menu')?.id ?? null;
-        });
-
-        expect(menuId, 'the save-as-template item should be in a menu on this page').toBeTruthy();
-
-        await page.locator(`[data-disclosure-trigger][aria-controls="${menuId}"]`).click();
-
-        const item = page.locator(`#${menuId}`).getByText('Save as a page template', {exact: true});
-
-        await expect(item).toBeVisible();
-        await item.click();
-
-        const modal = page.locator('.modal').filter({hasText: 'Save as a page template'});
-        await expect(modal).toBeVisible();
-
-        return modal;
-    }
+    const openDialogue = (page) => openSaveDialogue(page);
 
     test('clicking the menu item opens the dialogue, focused and ready', async ({page}) => {
         const modal = await openDialogue(page);

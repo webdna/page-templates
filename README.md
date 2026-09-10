@@ -40,6 +40,17 @@ already assembled — give it a title and save.
 If any part of the template could not be reproduced, the new page says so and names what is missing,
 before you save. A page that is not a complete copy never looks like one.
 
+**Changing what a template holds.** Open the template and choose **Edit content**. A temporary
+page opens, carrying the template's content — edit it exactly as you would any page, then choose
+**Save to template**. Pages already made from the template are not affected, and **Discard** throws
+the temporary page away. If you change your mind afterwards, **Put back previous content** undoes
+the last edit, once.
+
+A template that carries layout only has no content to edit. And if the temporary page is not a
+complete copy of the template — because a block type no longer exists, or a field could not be
+reproduced — it says so when it opens and refuses to be saved back, because doing so would
+permanently lose whatever was missing. You can still save it as a new template.
+
 **Curating.** The **Page Templates** section lists every template with its state, and is where you
 rename them, order them (the order editors see in the button), widen where they may be used, and
 delete ones that have served their purpose. Deleting a template never affects pages already made

@@ -344,6 +344,17 @@ class Templates extends Component
             $template->snapshot = [];
             $template->snapshotDecoded = false;
         }
+        // A previous snapshot that will not decode is treated as no previous snapshot: it is an
+        // undo, and offering an undo that cannot be performed is worse than not offering one.
+        try {
+            $decoded = $record->previousSnapshot === null
+                ? null
+                : Json::decode($record->previousSnapshot);
+        } catch (\Throwable) {
+            $decoded = null;
+        }
+        $template->previousSnapshot = is_array($decoded) ? $decoded : null;
+
         $template->sourceEntryId = $record->sourceEntryId;
         $template->sourceSiteId = $record->sourceSiteId;
         $template->sortOrder = $record->sortOrder;
@@ -390,6 +401,9 @@ class Templates extends Component
             $record->includeContent = $template->includeContent;
             $record->snapshot = Json::encode($template->snapshot);
             $record->snapshotVersion = $template->snapshotVersion;
+            $record->previousSnapshot = $template->previousSnapshot === null
+                ? null
+                : Json::encode($template->previousSnapshot);
             $record->sourceEntryId = $template->sourceEntryId;
             $record->sourceSiteId = $template->sourceSiteId;
             $record->sortOrder = $template->sortOrder ?? $this->nextSortOrder();

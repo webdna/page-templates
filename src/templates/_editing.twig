@@ -1,0 +1,53 @@
+{# Shown on a scratch page — a temporary page produced so a template's content can be edited.
+
+   This page looks exactly like any other page, which is the point: every field type works
+   normally. That also means nothing on the screen would otherwise tell the curator that saving in
+   the usual way does not touch the template, or that the page will be thrown away. Hence a
+   banner rather than a toast: it has to be true for as long as they are on the page. #}
+<div class="pane has-sidebar-fields" data-page-templates-editing="{{ editing.templateId }}">
+    <div class="{{ editing.faithful ? 'notice' : 'warning' }} with-icon">
+        <p>
+            {{ "You are editing the content of the template “{name}”."|t('page-templates', { name: editing.templateName }) }}
+            {{ "This page is temporary. Pages already made from this template are not affected by anything you do here."|t('page-templates') }}
+        </p>
+
+        {% if not editing.faithful %}
+            {# BR-30. Said now, not at save time. The alternative — letting somebody spend twenty
+               minutes editing and then refusing — is the same refusal delivered as late as
+               possible. #}
+            <p>
+                <strong>{{ "This page is not a complete copy of the template, so it cannot be saved back over it."|t('page-templates') }}</strong>
+                {{ "Doing so would permanently lose what could not be reproduced. You can still save it as a new template from this page’s own actions menu."|t('page-templates') }}
+            </p>
+
+            {% if editing.droppedBlockTypes|length %}
+                <p>{{ "Block types that could not be placed:"|t('page-templates') }}</p>
+                <ul>
+                    {% for blockType in editing.droppedBlockTypes %}
+                        <li data-block-type="{{ blockType }}"><code>{{ blockType }}</code></li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            {% if editing.emptiedFields|length %}
+                <p>{{ "Fields that could not be reproduced:"|t('page-templates') }}</p>
+                <ul>
+                    {% for handle in editing.emptiedFields %}
+                        <li data-field-handle="{{ handle }}"><code>{{ handle }}</code></li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endif %}
+
+        <div class="buttons">
+            {% if editing.faithful %}
+                <button type="button" class="btn submit" id="page-templates-save-content">
+                    {{ "Save to template"|t('page-templates') }}
+                </button>
+            {% endif %}
+            <button type="button" class="btn" id="page-templates-discard-content">
+                {{ "Discard"|t('page-templates') }}
+            </button>
+        </div>
+    </div>
+</div>

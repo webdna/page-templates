@@ -8,7 +8,7 @@ use craft\db\Table;
 /**
  * Install migration.
  *
- * Two tables, both dropped again by safeDown (BR-23). See section 4 of
+ * Three tables, all dropped again by safeDown (BR-23). See section 4 of
  * docs/specs/2026-09-09-page-templates-engine.md for why the shape is what it is — in short,
  * sections and entry types are referenced by **UID rather than id**, because applying project
  * config can delete and recreate one with the same uid and a new id, which would silently
@@ -18,6 +18,7 @@ class Install extends Migration
 {
     private const TEMPLATES = '{{%pagetemplates_templates}}';
     private const TEMPLATE_SECTIONS = '{{%pagetemplates_template_sections}}';
+    private const EDITING = '{{%pagetemplates_editing}}';
 
     /**
      * @inheritdoc
@@ -35,6 +36,10 @@ class Install extends Migration
             'includeContent' => $this->boolean()->notNull()->defaultValue(true),
             'snapshot' => $this->longText()->notNull(),
             'snapshotVersion' => $this->smallInteger()->unsigned()->notNull()->defaultValue(1),
+            // One step of undo for editing a template's content. The whole envelope —
+            // {"version":n,"fields":{…}} — because a snapshot restored without the format
+            // version it was written in cannot be read safely.
+            'previousSnapshot' => $this->longText(),
             // Provenance only, and nullable: deleting the example page must leave the template
             // fully usable (BR-25), because a snapshot is a copy rather than a reference.
             'sourceEntryId' => $this->integer(),
@@ -88,6 +93,34 @@ class Install extends Migration
             'CASCADE',
         );
 
+        // Which scratch page is currently editing which template's content. A scratch page is an
+        // unpublished draft produced from the template, so it stays out of editors' entry indexes.
+        $this->createTable(self::EDITING, [
+            'id' => $this->primaryKey(),
+            'templateId' => $this->integer()->notNull(),
+            'draftId' => $this->integer()->notNull(),
+            'siteId' => $this->integer(),
+            'userId' => $this->integer(),
+            // Whether the scratch page was a *complete* reproduction, recorded when it was
+            // produced: by save time the information is gone, and saving an incomplete
+            // reproduction back over the template would destroy what it failed to reproduce.
+            'wasFaithful' => $this->boolean()->notNull()->defaultValue(true),
+            'lostDetail' => $this->text(),
+            'dateCreated' => $this->dateTime()->notNull(),
+            'dateUpdated' => $this->dateTime()->notNull(),
+            'uid' => $this->uid(),
+        ]);
+
+        $this->createIndex(null, self::EDITING, ['draftId'], true);
+        $this->createIndex(null, self::EDITING, ['templateId'], false);
+
+        $this->addForeignKey(null, self::EDITING, ['templateId'], self::TEMPLATES, ['id'], 'CASCADE');
+        // Craft garbage-collects abandoned unpublished drafts, so this is what stops the mapping
+        // outliving the page it points at.
+        $this->addForeignKey(null, self::EDITING, ['draftId'], Table::ELEMENTS, ['id'], 'CASCADE');
+        $this->addForeignKey(null, self::EDITING, ['siteId'], Table::SITES, ['id'], 'SET NULL');
+        $this->addForeignKey(null, self::EDITING, ['userId'], Table::USERS, ['id'], 'SET NULL');
+
         return true;
     }
 
@@ -96,7 +129,8 @@ class Install extends Migration
      */
     public function safeDown(): bool
     {
-        // Dependent table first: its foreign key points at the templates table.
+        // Dependent tables first: their foreign keys point at the templates table.
+        $this->dropTableIfExists(self::EDITING);
         $this->dropTableIfExists(self::TEMPLATE_SECTIONS);
         $this->dropTableIfExists(self::TEMPLATES);
 

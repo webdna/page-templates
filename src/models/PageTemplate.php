@@ -37,6 +37,15 @@ class PageTemplate extends Model
     public int $snapshotVersion = Snapshots::FORMAT_VERSION;
 
     /**
+     * The snapshot this template held before its content was last edited, as a whole envelope —
+     * `['version' => n, 'fields' => [...]]` — or null if it has never been edited.
+     *
+     * One step of undo, not a history. Overwriting a template is otherwise irreversible, and the
+     * page it was captured from may since have changed or gone.
+     */
+    public ?array $previousSnapshot = null;
+
+    /**
      * Provenance only. Nullable, because deleting the example page must leave the template fully
      * usable (BR-25) — a snapshot is a copy, not a reference.
      */
@@ -124,6 +133,25 @@ class PageTemplate extends Model
     public function getIsReadable(): bool
     {
         return $this->snapshotDecoded && $this->snapshotVersion <= Snapshots::FORMAT_VERSION;
+    }
+
+    /**
+     * Whether this template's content can be edited (BR-29).
+     *
+     * A structure-only template carries no content, so producing a page from it and capturing it
+     * back would capture emptiness. Editing one is offered as re-capturing from a page instead.
+     */
+    public function getIsContentEditable(): bool
+    {
+        return $this->includeContent && $this->getIsUsable();
+    }
+
+    /**
+     * Whether there is a previous snapshot to go back to (BR-33).
+     */
+    public function getHasPreviousSnapshot(): bool
+    {
+        return $this->previousSnapshot !== null;
     }
 
     /**

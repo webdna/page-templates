@@ -12,6 +12,7 @@ use craft\db\ActiveRecord;
  * @property bool $includeContent
  * @property string $snapshot JSON
  * @property int $snapshotVersion
+ * @property string|null $previousSnapshot JSON
  * @property int|null $sourceEntryId
  * @property int|null $sourceSiteId
  * @property int|null $sortOrder

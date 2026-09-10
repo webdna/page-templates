@@ -63,8 +63,42 @@
 
     <hr>
 
-    {# Read-only facts about the capture. Not editable: changing what a template holds means
-       capturing again, which is deliberate — see the engine spec's Later list. #}
+    {# The content a template holds cannot be edited here: it is Craft's serialized field data,
+       and the only thing that can meaningfully edit that is Craft's own element editor. So this
+       hands the curator a scratch page made from the template, and captures it back. #}
+    <div class="field" data-page-templates-content>
+        <div class="heading">
+            <label>{{ "Content"|t('page-templates') }}</label>
+        </div>
+        <div class="instructions">
+            {% if template.isContentEditable %}
+                <p>{{ "Editing opens a temporary page made from this template. Change it as you would any page, then save it back. Pages already made from this template are not affected."|t('page-templates') }}</p>
+            {% elseif not template.includeContent %}
+                <p>{{ "This template carries layout only, so there is no content to edit. To give it content, save a new template from a page."|t('page-templates') }}</p>
+            {% else %}
+                <p>{{ "This template cannot produce a page, so its content cannot be edited."|t('page-templates') }}</p>
+            {% endif %}
+        </div>
+        <div class="input">
+            {% if template.isContentEditable %}
+                <button type="button" class="btn" id="page-templates-edit-content">
+                    {{ "Edit content"|t('page-templates') }}
+                </button>
+            {% endif %}
+            {% if template.hasPreviousSnapshot %}
+                {# BR-33. One step of undo, offered only when there is something to go back to,
+                   because a permanently disabled button invites the question of why. #}
+                <button type="button" class="btn" id="page-templates-revert-content">
+                    {{ "Put back previous content"|t('page-templates') }}
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <hr>
+
+    {# Read-only facts about the capture. The kind of page and whether it carries content are
+       fixed at capture (BR-2) — changing either means saving a new template from a page. #}
     <div class="meta read-only">
         {{ forms.field({ label: "Kind of page"|t('page-templates') }, template.entryType ? template.entryType.name : "(deleted)"|t('page-templates')) }}
         {{ forms.field({ label: "Carries"|t('page-templates') }, template.includeContent
@@ -73,3 +107,48 @@
         {{ forms.field({ label: "Snapshot format"|t('page-templates') }, template.snapshotVersion) }}
     </div>
 {% endblock %}
+
+{% js %}
+    (() => {
+        // Posted rather than linked: these change things, and the screen is already a full-page
+        // form, so a nested form is not available to put them in.
+        const post = (button, action, body, confirmText) => {
+            if (!button) {
+                return;
+            }
+
+            button.addEventListener('click', () => {
+                if (confirmText && !window.confirm(confirmText)) {
+                    return;
+                }
+
+                button.classList.add('loading');
+
+                Craft.sendActionRequest('POST', action, {data: body})
+                    .then(({data}) => {
+                        window.location.href = data.cpEditUrl || data.redirect;
+                    })
+                    .catch((error) => {
+                        button.classList.remove('loading');
+                        Craft.cp.displayError(
+                            error?.response?.data?.message ||
+                            Craft.t('page-templates', 'Something went wrong.')
+                        );
+                    });
+            });
+        };
+
+        post(
+            document.getElementById('page-templates-edit-content'),
+            'page-templates/templates/edit-content',
+            {templateId: {{ template.id }}}
+        );
+
+        post(
+            document.getElementById('page-templates-revert-content'),
+            'page-templates/templates/revert-content',
+            {templateId: {{ template.id }}},
+            Craft.t('page-templates', 'Put back the content this template held before it was last edited? The current content will be lost.')
+        );
+    })();
+{% endjs %}

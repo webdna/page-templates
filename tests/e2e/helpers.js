@@ -90,6 +90,81 @@ export async function deleteTestTemplates(browser) {
 }
 
 /**
+ * Opens the save-as-template dialogue on the page currently being edited.
+ *
+ * Craft's edit screen has several disclosure menus ("Actions", the breadcrumb, the account menu).
+ * Rather than hard-code which one Craft currently puts element actions in — it has moved before
+ * and would move again — this finds the menu that actually contains the item and opens its own
+ * trigger.
+ */
+export async function openSaveDialogue(page) {
+    const menuId = await page.evaluate(() => {
+        const label = [...document.querySelectorAll('.menu-item-label, a, button')]
+            .find((el) => el.textContent.trim() === 'Save as a page template');
+
+        return label?.closest('.menu')?.id ?? null;
+    });
+
+    expect(menuId, 'the save-as-template item should be in a menu on this page').toBeTruthy();
+
+    await page.locator(`[data-disclosure-trigger][aria-controls="${menuId}"]`).click();
+
+    const item = page.locator(`#${menuId}`).getByText('Save as a page template', {exact: true});
+
+    await expect(item).toBeVisible();
+    await item.click();
+
+    const modal = page.locator('.modal').filter({hasText: 'Save as a page template'});
+    await expect(modal).toBeVisible();
+
+    return modal;
+}
+
+/**
+ * Saves a template from the example page and returns its name.
+ *
+ * Goes through the real dialogue rather than seeding the database, so a test that depends on a
+ * template also depends on the flow that makes one — and cannot pass against a build where
+ * saving is broken.
+ */
+export async function saveTemplateFromExamplePage(page, name, {includeContent = true} = {}) {
+    await openExamplePage(page);
+
+    const modal = await openSaveDialogue(page);
+    await modal.locator('input[type="text"]').first().fill(name);
+
+    if (!includeContent) {
+        // Clicked by its label: Craft styles the checkbox so the label sits over it, and
+        // Playwright refuses a click it can see would land on something else.
+        await modal.getByText('Include this page').click();
+        await expect(modal.locator('input[type="checkbox"]')).not.toBeChecked();
+    }
+
+    await modal.getByRole('button', {name: 'Save template'}).click();
+    await expect(modal).toBeHidden({timeout: 10000});
+
+    return name;
+}
+
+/**
+ * The control-panel URL of a template, found by name in the management list.
+ */
+export async function templateUrlByName(page, name) {
+    await page.goto('/admin/page-templates');
+    await expect(page.locator('#page-templates-table table tbody tr').first()).toBeVisible();
+
+    const href = await page.$$eval(
+        '#page-templates-table table tbody tr td a',
+        (links, wanted) => links.find((a) => a.textContent.trim() === wanted)?.getAttribute('href') ?? null,
+        name
+    );
+
+    expect(href, `a template named "${name}" should be in the list`).toBeTruthy();
+
+    return href;
+}
+
+/**
  * The example page every fidelity scenario is built around.
  */
 export async function openExamplePage(page) {

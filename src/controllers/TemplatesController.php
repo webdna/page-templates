@@ -8,6 +8,7 @@ use craft\helpers\Json;
 use craft\helpers\UrlHelper;
 use craft\models\Section;
 use craft\web\Controller;
+use webdna\pagetemplates\exceptions\IncompleteReproductionException;
 use webdna\pagetemplates\models\PageTemplate;
 use webdna\pagetemplates\PageTemplates;
 use yii\web\ForbiddenHttpException;
@@ -64,6 +65,14 @@ class TemplatesController extends Controller
             throw new NotFoundHttpException('Template not found.');
         }
 
+        // The edit screen's own JavaScript uses Craft.t(), which needs the category's messages
+        // shipped to the browser — they are not there by default, and a missing one renders as
+        // the untranslated key on a translated site rather than failing.
+        Craft::$app->getView()->registerTranslations('page-templates', [
+            'Put back the content this template held before it was last edited? The current content will be lost.',
+            'Something went wrong.',
+        ]);
+
         return $this->renderTemplate('page-templates/_edit', [
             'template' => $template,
             // Only sections that accept this template's kind of page are offered. Allowing any
@@ -96,7 +105,15 @@ class TemplatesController extends Controller
 
             // Re-rendered with the submitted model rather than redirected, so the screen keeps
             // what the curator typed and shows the field errors against it.
-            return $this->renderTemplate('page-templates/_edit', [
+            // The edit screen's own JavaScript uses Craft.t(), which needs the category's messages
+        // shipped to the browser — they are not there by default, and a missing one renders as
+        // the untranslated key on a translated site rather than failing.
+        Craft::$app->getView()->registerTranslations('page-templates', [
+            'Put back the content this template held before it was last edited? The current content will be lost.',
+            'Something went wrong.',
+        ]);
+
+        return $this->renderTemplate('page-templates/_edit', [
                 'template' => $template,
                 'availableSections' => $this->sectionsAccepting($template),
             ]);
@@ -200,6 +217,162 @@ class TemplatesController extends Controller
                 return false;
             },
         ));
+    }
+
+    /**
+     * Starts editing a template's content, and hands the curator the scratch page to edit.
+     *
+     * A snapshot cannot be edited in place, so this produces a page from the template and sends
+     * the curator to Craft's own editor for it — every field type then behaves exactly as it does
+     * anywhere else. Saving it back is TemplatesController::actionSaveContent().
+     */
+    public function actionEditContent(): Response
+    {
+        $this->requireManagePermission();
+        $this->requirePostRequest();
+
+        $plugin = PageTemplates::getInstance();
+        $templateId = (int)Craft::$app->getRequest()->getRequiredBodyParam('templateId');
+        $template = $plugin->templates->getTemplateById($templateId);
+
+        if ($template === null) {
+            throw new NotFoundHttpException('Template not found.');
+        }
+
+        try {
+            $reproduction = $plugin->contentEditing->begin(
+                $template,
+                null,
+                Craft::$app->getUser()->getId(),
+            );
+        } catch (\Throwable $e) {
+            Craft::error($e->getMessage(), 'page-templates');
+
+            // The refusals here are all things a curator can act on — layout only, nowhere to put
+            // it, somebody else is editing — so the reason is shown rather than swallowed.
+            return $this->asFailure($e->getMessage());
+        }
+
+        return $this->asSuccess(data: [
+            'cpEditUrl' => UrlHelper::urlWithParams(
+                $reproduction->entry->getCpEditUrl(),
+                ['fresh' => 1],
+            ),
+        ]);
+    }
+
+    /**
+     * Captures the scratch page back over the template it came from.
+     */
+    public function actionSaveContent(): Response
+    {
+        $this->requireManagePermission();
+        $this->requirePostRequest();
+
+        $plugin = PageTemplates::getInstance();
+        $draftId = (int)Craft::$app->getRequest()->getRequiredBodyParam('draftId');
+        $record = $plugin->contentEditing->recordForDraft($draftId);
+
+        if ($record === null) {
+            throw new NotFoundHttpException('That page is not editing a template.');
+        }
+
+        $draft = Entry::find()
+            ->id($draftId)
+            ->siteId($record->siteId)
+            ->status(null)
+            ->drafts(null)
+            ->one();
+
+        if ($draft === null) {
+            throw new NotFoundHttpException('Page not found.');
+        }
+
+        try {
+            $template = $plugin->contentEditing->saveBack($record, $draft);
+        } catch (IncompleteReproductionException $e) {
+            // BR-30. Named rather than generic: a curator can only act on knowing *what* would
+            // have been lost, and the alternative offered is a real one.
+            return $this->asFailure($e->getMessage(), [
+                'lost' => $e->lost,
+                'canSaveAsNew' => true,
+            ]);
+        } catch (\Throwable $e) {
+            Craft::error($e->getMessage(), 'page-templates');
+
+            return $this->asFailure($e->getMessage());
+        }
+
+        Craft::$app->getSession()->setNotice(
+            Craft::t('page-templates', 'Updated the content of “{name}”.', ['name' => $template->name]),
+        );
+
+        return $this->asSuccess(data: [
+            'redirect' => UrlHelper::cpUrl("page-templates/$template->id"),
+        ]);
+    }
+
+    /**
+     * Throws a scratch page away, leaving the template as it was.
+     */
+    public function actionDiscardContent(): Response
+    {
+        $this->requireManagePermission();
+        $this->requirePostRequest();
+
+        $plugin = PageTemplates::getInstance();
+        $draftId = (int)Craft::$app->getRequest()->getRequiredBodyParam('draftId');
+        $record = $plugin->contentEditing->recordForDraft($draftId);
+
+        if ($record === null) {
+            throw new NotFoundHttpException('That page is not editing a template.');
+        }
+
+        $templateId = $record->templateId;
+        $plugin->contentEditing->discard($record);
+
+        Craft::$app->getSession()->setNotice(
+            Craft::t('page-templates', 'Discarded the changes. The template is unchanged.'),
+        );
+
+        return $this->asSuccess(data: [
+            'redirect' => UrlHelper::cpUrl("page-templates/$templateId"),
+        ]);
+    }
+
+    /**
+     * Puts back the content a template held before it was last edited (BR-33).
+     */
+    public function actionRevertContent(): Response
+    {
+        $this->requireManagePermission();
+        $this->requirePostRequest();
+
+        $plugin = PageTemplates::getInstance();
+        $templateId = (int)Craft::$app->getRequest()->getRequiredBodyParam('templateId');
+        $template = $plugin->templates->getTemplateById($templateId);
+
+        if ($template === null) {
+            throw new NotFoundHttpException('Template not found.');
+        }
+
+        if (!$plugin->contentEditing->revert($template)) {
+            return $this->asFailure(
+                Craft::t('page-templates', 'There is nothing to go back to.'),
+            );
+        }
+
+        // A session notice rather than the response's own message: the browser navigates away
+        // immediately, which would take an inline message with it.
+        Craft::$app->getSession()->setNotice(
+            Craft::t('page-templates', 'Put back the previous content of “{name}”.', [
+                'name' => $template->name,
+            ]),
+        );
+
+        return $this->asSuccess(data: [
+            'redirect' => UrlHelper::cpUrl("page-templates/$template->id"),
+        ]);
     }
 
     private function requireManagePermission(): void
