@@ -85,13 +85,18 @@
                     {{ "Edit content"|t('page-templates') }}
                 </button>
             {% endif %}
-            {% if template.hasPreviousSnapshot %}
-                {# BR-33. One step of undo, offered only when there is something to go back to,
-                   because a permanently disabled button invites the question of why. #}
-                <button type="button" class="btn" id="page-templates-revert-content">
-                    {{ "Put back previous content"|t('page-templates') }}
-                </button>
-            {% endif %}
+            {# BR-33 is built but deliberately not offered yet. Saving a template's content
+               still keeps the version it replaced, and page-templates/templates/revert-content
+               still restores it — only the control is hidden, on the view that one step of undo
+               raises more questions than it answers until there is a fuller version history to
+               put it in. To bring it back, restore the button here and its wiring below:
+
+                 {% if template.hasPreviousSnapshot %}
+                     <button type="button" class="btn" id="page-templates-revert-content">
+                         {{ "Rollback to previous version"|t('page-templates') }}
+                     </button>
+                 {% endif %}
+            #}
         </div>
     </div>
 
@@ -144,11 +149,14 @@
             {templateId: {{ template.id }}}
         );
 
-        post(
-            document.getElementById('page-templates-revert-content'),
-            'page-templates/templates/revert-content',
-            {templateId: {{ template.id }}},
-            Craft.t('page-templates', 'Put back the content this template held before it was last edited? The current content will be lost.')
-        );
+        // The rollback control is hidden for now — see the note beside the buttons above. Its
+        // wiring would go here:
+        //
+        //   post(
+        //       document.getElementById('page-templates-revert-content'),
+        //       'page-templates/templates/revert-content',
+        //       {templateId: <template id>},
+        //       Craft.t('page-templates', 'Roll this template back to its previous version? The content it holds now will be lost.')
+        //   );
     })();
 {% endjs %}

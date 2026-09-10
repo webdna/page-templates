@@ -129,9 +129,8 @@ test.describe('Editing a template’s content', () => {
         await page.waitForURL(/\/admin\/page-templates\/\d+/, {timeout: 25000});
         await expect(page.locator('#notifications')).toContainText('Updated the content');
 
-        // The undo only appears once there is something to undo, so it doubles as proof the
-        // previous content was kept.
-        await expect(page.locator('#page-templates-revert-content')).toBeVisible();
+        // That the replaced version is kept is covered by ContentEditingTest — there is no
+        // control for it on screen while rollback is hidden.
 
         // What the template now *produces* is the only thing that matters. Reopening the scratch
         // page is the cheapest way to see the stored snapshot rendered.

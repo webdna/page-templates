@@ -44,8 +44,9 @@ before you save. A page that is not a complete copy never looks like one.
 opens as a page, carrying its content — edit it exactly as you would any page, then **Save
 template**. It is Craft's ordinary edit screen, so every field behaves as it does anywhere else;
 only the title, the save button and the **Discard** beside it differ. Pages already made from the
-template are not affected. If you change your mind afterwards, **Put back previous content** undoes
-the last edit, once.
+template are not affected.
+
+Every content save keeps the version it replaced, though there is no control to restore it yet.
 
 A template that carries layout only has no content to edit. And if the temporary page is not a
 complete copy of the template — because a block type no longer exists, or a field could not be

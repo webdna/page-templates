@@ -70,7 +70,7 @@ class TemplatesController extends Controller
         // shipped to the browser — they are not there by default, and a missing one renders as
         // the untranslated key on a translated site rather than failing.
         Craft::$app->getView()->registerTranslations('page-templates', [
-            'Put back the content this template held before it was last edited? The current content will be lost.',
+            'Roll this template back to its previous version? The content it holds now will be lost.',
             'Something went wrong.',
         ]);
 
@@ -110,7 +110,7 @@ class TemplatesController extends Controller
         // shipped to the browser — they are not there by default, and a missing one renders as
         // the untranslated key on a translated site rather than failing.
         Craft::$app->getView()->registerTranslations('page-templates', [
-            'Put back the content this template held before it was last edited? The current content will be lost.',
+            'Roll this template back to its previous version? The content it holds now will be lost.',
             'Something went wrong.',
         ]);
 
@@ -385,14 +385,14 @@ class TemplatesController extends Controller
 
         if (!$plugin->contentEditing->revert($template)) {
             return $this->asFailure(
-                Craft::t('page-templates', 'There is nothing to go back to.'),
+                Craft::t('page-templates', 'There is no previous version to roll back to.'),
             );
         }
 
         // A session notice rather than the response's own message: the browser navigates away
         // immediately, which would take an inline message with it.
         Craft::$app->getSession()->setNotice(
-            Craft::t('page-templates', 'Put back the previous content of “{name}”.', [
+            Craft::t('page-templates', 'Rolled “{name}” back to its previous version.', [
                 'name' => $template->name,
             ]),
         );
