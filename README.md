@@ -96,6 +96,33 @@ ddev exec "vendor/bin/codecept run -c plugins/page-templates"
 **The integration suite runs against a separate `db_test` database, never the development one** —
 Craft's test framework drops every table in whatever database it is handed.
 
+### Browser tests
+
+The control-panel JavaScript — the save dialogue, the New entry button, and drag-reordering the
+list — is covered by Playwright, because none of it is reachable from PHP or `curl`. It earned its
+place immediately: it found three defects in the New entry button that HTTP-level checks had all
+reported as working, none of which threw anything.
+
+```bash
+npx playwright test
+```
+
+Requires the environment running (`ddev start`) and the fixture users' passwords in a gitignored
+`.env.e2e` at the project root:
+
+```
+PT_EDITOR_PASSWORD=…
+PT_CURATOR_PASSWORD=…
+```
+
+Create the users with `ddev craft migrate/all` (they need Craft Pro) and set their passwords with
+`ddev craft users/set-password <username>`.
+
+Unlike the integration suite, these run against the **development** database — the control panel is
+served from it and there is no way around that. They are written to be safe there: templates they
+create are prefixed and deleted afterwards, and the pages they create are unsaved drafts that
+Craft's garbage collection removes.
+
 ## Manual test plans
 
 `test-plans/` in the host project holds runnable QA checklists for the control-panel journeys —
