@@ -13,6 +13,7 @@ use craft\events\RegisterUrlRulesEvent;
 use craft\services\UserPermissions;
 use craft\web\UrlManager;
 use craft\helpers\Json;
+use craft\helpers\Html;
 use craft\helpers\UrlHelper;
 use craft\web\View;
 use webdna\pagetemplates\assetbundles\EntryEditAsset;
@@ -22,6 +23,9 @@ use webdna\pagetemplates\services\Access;
 use webdna\pagetemplates\services\ContentEditing;
 use webdna\pagetemplates\services\Snapshots;
 use webdna\pagetemplates\services\Templates;
+use craft\web\CpScreenResponseBehavior;
+use craft\web\Response;
+use webdna\pagetemplates\records\EditingDraftRecord;
 use yii\base\Event;
 
 /**
@@ -150,11 +154,19 @@ class PageTemplates extends BasePlugin
             return $this->renderIncompleteReproductionWarning();
         });
 
-        // BR-31. On a scratch page, says so — and carries the only controls that save it back
-        // into the template or throw it away.
-        Craft::$app->getView()->hook('cp.layouts.base', function(array &$context): ?string {
-            return $this->renderContentEditingBanner();
-        });
+        // BR-31. On a scratch page, Craft's own edit screen is reshaped into the template's:
+        // its title, its save button, and a way out. Done on the response rather than with a
+        // banner of our own, so the screen keeps Craft's shape and a curator learns nothing new.
+        if (!Craft::$app->getRequest()->getIsConsoleRequest()) {
+            Craft::$app->getResponse()->on(
+                Response::EVENT_BEFORE_SEND,
+                function(Event $event): void {
+                    // Before send is before prepare(), and prepare() is what runs the CP screen
+                    // formatter — so the behavior can still be changed here.
+                    $this->adaptScratchPageScreen($event->sender);
+                },
+            );
+        }
 
         // BR-4, BR-16. The templates each section can offer *this* user, injected on element
         // index pages so the button has them without a round trip.
@@ -215,41 +227,167 @@ class PageTemplates extends BasePlugin
      * it, so the warning is shown once and does not follow the editor around.
      */
     /**
-     * The banner on a scratch page — a page that exists only so a template's content can be
-     * edited (BR-31).
+     * Reshapes Craft's entry edit screen when the page being edited is a scratch page — one that
+     * exists only so a template's content can be edited (BR-31).
+     *
+     * A scratch page is an ordinary unpublished draft, which is exactly what makes the whole
+     * approach work and also what makes this necessary: left alone, the screen says *Create a
+     * new entry* and its save button publishes a real page. So the screen is retitled after the
+     * template, its save button is pointed at the action that captures the page back, and a way
+     * out is added beside it.
+     *
+     * Everything here goes through Craft's own screen properties rather than markup of ours, so
+     * the page keeps the shape a curator already knows.
      */
-    private function renderContentEditingBanner(): ?string
+    private function adaptScratchPageScreen(Response $response): void
     {
+        /** @var CpScreenResponseBehavior|null $screen */
+        $screen = $response->getBehavior(CpScreenResponseBehavior::NAME);
+
+        if ($screen === null) {
+            return;
+        }
+
         $controller = Craft::$app->controller;
 
         if (!$controller instanceof ElementsController) {
-            return null;
+            return;
         }
 
         $element = $controller->element ?? null;
 
         if (!$element instanceof Entry || $element->id === null) {
-            return null;
+            return;
         }
 
         $record = $this->contentEditing->recordForDraft($element->id);
 
         if ($record === null) {
-            return null;
+            return;
         }
 
         $user = Craft::$app->getUser()->getIdentity();
 
-        // Someone without manage rights should never reach a scratch page, but if they do they
-        // get no controls: saving into a template is a curator's act (BR-32).
+        // Saving into a template is a curator's act (BR-32). Someone without manage rights should
+        // never reach a scratch page, but if they do the screen is left exactly as Craft built it.
         if ($user === null || !$this->access->canManageTemplates($user)) {
-            return null;
+            return;
         }
 
         $template = $this->templates->getTemplateById($record->templateId);
 
         if ($template === null) {
-            return null;
+            return;
+        }
+
+        $templateUrl = UrlHelper::cpUrl("page-templates/$template->id");
+        $faithful = (bool)$record->wasFaithful;
+
+        $screen->title = $this->scratchPageTitle($template->name);
+
+        // Back to the template, not to Entries: this page is not part of the site's content, and
+        // an editor following the Entries crumb would be somewhere they cannot get back from.
+        $screen->crumbs = [
+            ['label' => Craft::t('page-templates', 'Page Templates'), 'url' => UrlHelper::cpUrl('page-templates')],
+            ['label' => $template->name, 'url' => $templateUrl],
+        ];
+
+        // The decisive change. Craft points an unpublished draft's save button at
+        // elements/apply-draft, which would publish this scratch page as a real page on the site.
+        $screen->action = 'page-templates/templates/save-content';
+        $screen->redirectUrl = $templateUrl;
+        $screen->submitButtonLabel = Craft::t('page-templates', 'Save template');
+
+        $screen->noticeHtml = $this->scratchPageNotice($record, $faithful);
+
+        // Craft's alternatives to the save button are all about publishing an entry — "Save as a
+        // new entry" would put template content on the site as a real page. On this screen the
+        // only two meaningful outcomes are keeping the changes and throwing them away.
+        $screen->altActions = [];
+
+        $existing = $screen->additionalButtonsHtml;
+
+        // Appended, so it lands after Craft's own buttons (View among them) and before the save
+        // button, which the CP layout renders next.
+        $screen->additionalButtonsHtml = function() use ($existing): string {
+            $html = is_callable($existing) ? (string)call_user_func($existing) : (string)$existing;
+
+            return $html . Html::button(Craft::t('page-templates', 'Discard'), [
+                'id' => 'page-templates-discard-content',
+                'class' => ['btn'],
+                'type' => 'button',
+            ]);
+        };
+
+        $this->registerJsTranslations([
+            'Discard the changes to this template’s content? The page will be thrown away.',
+            'Something went wrong.',
+        ]);
+
+        Craft::$app->getView()->registerJsWithVars(
+            fn($scratchId) => <<<JS
+(() => {
+  const button = document.getElementById('page-templates-discard-content');
+
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener('click', () => {
+    if (!window.confirm(Craft.t('page-templates', 'Discard the changes to this template’s content? The page will be thrown away.'))) {
+      return;
+    }
+
+    button.classList.add('loading');
+
+    Craft.sendActionRequest('POST', 'page-templates/templates/discard-content', {
+      data: {elementId: $scratchId},
+    })
+      .then(({data}) => {
+        window.location.href = data.redirect;
+      })
+      .catch((error) => {
+        button.classList.remove('loading');
+        Craft.cp.displayError(
+          error?.response?.data?.message ||
+          Craft.t('page-templates', 'Something went wrong.')
+        );
+      });
+  });
+})();
+JS,
+            [(int)$element->id],
+        );
+    }
+
+    /**
+     * The scratch page's title: the template's name, said to be a template.
+     *
+     * A name that already ends in "template" is left alone — "Campaign LP Template Template" is
+     * the sort of thing that makes a screen look unfinished.
+     */
+    private function scratchPageTitle(string $name): string
+    {
+        if (preg_match('/\btemplates?$/i', $name)) {
+            return $name;
+        }
+
+        return Craft::t('page-templates', '{name} Template', ['name' => $name]);
+    }
+
+    /**
+     * What the screen says about itself, in Craft's own notice slot.
+     */
+    private function scratchPageNotice(EditingDraftRecord $record, bool $faithful): string
+    {
+        if ($faithful) {
+            return Html::tag(
+                'p',
+                Craft::t(
+                    'page-templates',
+                    'Changes here update the template. Pages already made from it are not affected.',
+                ),
+            );
         }
 
         try {
@@ -258,67 +396,15 @@ class PageTemplates extends BasePlugin
             $lost = [];
         }
 
-        $view = Craft::$app->getView();
+        $named = array_merge($lost['droppedBlockTypes'] ?? [], $lost['emptiedFields'] ?? []);
 
-        $this->registerJsTranslations([
-            'Discard the changes to this template’s content? The page will be thrown away.',
-            'Something went wrong.',
-        ]);
-
-        // Registered from here rather than from a {% js %} block in the template, because a hook
-        // renders late enough that a block registered inside it can miss the page's JS output.
-        $view->registerJsWithVars(
-            fn($draftId) => <<<JS
-(() => {
-  const post = (button, action, confirmText) => {
-    if (!button) {
-      return;
-    }
-
-    button.addEventListener('click', () => {
-      if (confirmText && !window.confirm(confirmText)) {
-        return;
-      }
-
-      button.classList.add('loading');
-
-      Craft.sendActionRequest('POST', action, {data: {draftId: $draftId}})
-        .then(({data}) => {
-          window.location.href = data.redirect;
-        })
-        .catch((error) => {
-          button.classList.remove('loading');
-          Craft.cp.displayError(
-            error?.response?.data?.message ||
-            Craft.t('page-templates', 'Something went wrong.')
-          );
-        });
-    });
-  };
-
-  post(
-    document.getElementById('page-templates-save-content'),
-    'page-templates/templates/save-content'
-  );
-  post(
-    document.getElementById('page-templates-discard-content'),
-    'page-templates/templates/discard-content',
-    Craft.t('page-templates', 'Discard the changes to this template’s content? The page will be thrown away.')
-  );
-})();
-JS,
-            [(int)$element->id],
-        );
-
-        return $view->renderTemplate('page-templates/_editing', [
-            'editing' => [
-                'templateId' => $template->id,
-                'templateName' => $template->name,
-                'faithful' => (bool)$record->wasFaithful,
-                'droppedBlockTypes' => $lost['droppedBlockTypes'] ?? [],
-                'emptiedFields' => $lost['emptiedFields'] ?? [],
-            ],
-        ]);
+        // BR-30, said on arrival rather than at save time. Refusing after twenty minutes of
+        // editing is the same refusal delivered as late as it can be.
+        return Html::tag('p', Craft::t(
+            'page-templates',
+            'This page is not a complete copy of the template, so it cannot be saved back over it — doing so would permanently lose what could not be reproduced ({lost}). You can still save it as a new template from the actions menu.',
+            ['lost' => implode(', ', $named)],
+        ));
     }
 
     private function renderIncompleteReproductionWarning(): ?string

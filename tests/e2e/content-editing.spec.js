@@ -12,9 +12,9 @@ import {
  *
  * A template's content is edited by producing a temporary page from it, editing that page in
  * Craft's own editor, and capturing it back. Almost none of that can be checked without a
- * browser: whether the banner appears on the temporary page, whether its buttons are wired,
- * and — the part that matters — whether an edit made in Craft's editor actually reaches the
- * template.
+ * browser: the scratch page is Craft's own entry edit screen, reshaped through the CP screen
+ * response — its title, its save button and where that button posts — and none of that is
+ * visible until the page renders.
  *
  * Each test works on a template it created itself, so a run that fails part-way leaves an
  * abandoned editing session on a throwaway template rather than on a real one.
@@ -63,7 +63,7 @@ test.describe('Editing a template’s content', () => {
     });
 
     /**
-     * Opens the scratch page for a template and returns its banner.
+     * Opens the scratch page for a template.
      */
     async function beginEditing(page, url) {
         await page.goto(url);
@@ -71,25 +71,50 @@ test.describe('Editing a template’s content', () => {
 
         await page.waitForURL(/\/admin\/content\/entries\/.+/, {timeout: 25000});
         await expect(page.locator('#main-content')).toBeVisible();
-
-        const banner = page.locator('[data-page-templates-editing]');
-        await expect(banner).toBeVisible();
-
-        return banner;
+        await expect(page.locator('#page-templates-discard-content')).toBeVisible();
     }
 
-    test('the scratch page says what it is and offers the two ways out', async ({page}) => {
-        const banner = await beginEditing(page, editableUrl);
+    const saveTemplate = (page) =>
+        page.locator('#action-buttons button[type="submit"]').first().click();
 
-        // Without this the page looks like an ordinary page, and saving it the usual way would
-        // look like it had updated the template when it had not.
-        await expect(banner).toContainText('You are editing the content of the template');
-        await expect(banner).toContainText('This page is temporary');
-        await expect(page.locator('#page-templates-save-content')).toBeVisible();
-        await expect(page.locator('#page-templates-discard-content')).toBeVisible();
+    test('the scratch page reads as the template, not as a new entry', async ({page}) => {
+        await beginEditing(page, editableUrl);
+
+        // Left alone, Craft titles an unpublished draft "Create a new entry" — which is what a
+        // curator would be told they were doing while actually editing a template.
+        await expect(page.locator('#header h1')).toContainText('Template');
+        await expect(page.locator('#header h1')).not.toContainText('Create a new entry');
 
         // Craft's own editor is doing the work — the point of the whole approach.
         await expect(page.locator('input[name="fields[heading]"]')).toBeVisible();
+
+        // Craft's notice slot, not a banner of ours.
+        await expect(page.locator('#main-content')).toContainText('Changes here update the template');
+    });
+
+    test('the save button saves the template rather than publishing the page', async ({page}) => {
+        // The single most important assertion on this screen. Craft points an unpublished
+        // draft's save button at elements/apply-draft, which would publish the scratch page as a
+        // real page on the site — silently, and looking like a success.
+        await beginEditing(page, editableUrl);
+
+        await expect(page.locator('input[name="action"]')).toHaveValue(
+            'page-templates/templates/save-content'
+        );
+        await expect(page.locator('#action-buttons button[type="submit"]').first())
+            .toHaveText(/Save template/);
+    });
+
+    test('the way out sits with the other buttons, in Craft’s own order', async ({page}) => {
+        await beginEditing(page, editableUrl);
+
+        const labels = await page.locator('#action-buttons button, #action-buttons a')
+            .evaluateAll((els) => els.map((el) => el.textContent.trim()).filter(Boolean));
+
+        expect(labels).toContain('Discard');
+        // Between viewing the page and saving it, which is where a way out belongs.
+        expect(labels.indexOf('Discard')).toBeGreaterThan(labels.indexOf('View'));
+        expect(labels.indexOf('Discard')).toBeLessThan(labels.findIndex((l) => /Save template/.test(l)));
     });
 
     test('an edit made on the scratch page reaches the template', async ({page}) => {
@@ -100,7 +125,7 @@ test.describe('Editing a template’s content', () => {
         // Craft autosaves the draft; the save-back reads what is stored, not what is on screen.
         await page.waitForTimeout(2500);
 
-        await page.locator('#page-templates-save-content').click();
+        await saveTemplate(page);
         await page.waitForURL(/\/admin\/page-templates\/\d+/, {timeout: 25000});
         await expect(page.locator('#notifications')).toContainText('Updated the content');
 
@@ -142,12 +167,15 @@ test.describe('Editing a template’s content', () => {
         await expect(page.locator('[data-page-templates-content]')).toContainText('layout only');
     });
 
-    test('an ordinary page carries no editing banner', async ({page}) => {
-        // The banner is rendered from a hook that runs on every element edit screen, so a wrong
-        // condition would put it on every page in the site.
+    test('an ordinary page is left exactly as Craft built it', async ({page}) => {
+        // The screen is reshaped from a response hook that runs on every control-panel screen,
+        // so a wrong condition would retitle and rewire every entry in the site.
         await page.goto('/admin/content/entries/landing/33');
         await expect(page.locator('#main-content')).toBeVisible();
 
-        await expect(page.locator('[data-page-templates-editing]')).toHaveCount(0);
+        await expect(page.locator('#page-templates-discard-content')).toHaveCount(0);
+        await expect(page.locator('input[name="action"]')).not.toHaveValue(
+            'page-templates/templates/save-content'
+        );
     });
 });

@@ -40,10 +40,11 @@ already assembled — give it a title and save.
 If any part of the template could not be reproduced, the new page says so and names what is missing,
 before you save. A page that is not a complete copy never looks like one.
 
-**Changing what a template holds.** Open the template and choose **Edit content**. A temporary
-page opens, carrying the template's content — edit it exactly as you would any page, then choose
-**Save to template**. Pages already made from the template are not affected, and **Discard** throws
-the temporary page away. If you change your mind afterwards, **Put back previous content** undoes
+**Changing what a template holds.** Open the template and choose **Edit content**. The template
+opens as a page, carrying its content — edit it exactly as you would any page, then **Save
+template**. It is Craft's ordinary edit screen, so every field behaves as it does anywhere else;
+only the title, the save button and the **Discard** beside it differ. Pages already made from the
+template are not affected. If you change your mind afterwards, **Put back previous content** undoes
 the last edit, once.
 
 A template that carries layout only has no content to edit. And if the temporary page is not a

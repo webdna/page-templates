@@ -3,6 +3,7 @@
 namespace webdna\pagetemplates\controllers;
 
 use Craft;
+use craft\base\Element;
 use craft\elements\Entry;
 use craft\helpers\Json;
 use craft\helpers\UrlHelper;
@@ -263,22 +264,32 @@ class TemplatesController extends Controller
 
     /**
      * Captures the scratch page back over the template it came from.
+     *
+     * This is the scratch page's own save button, so the whole edit form posts here. What was
+     * typed is applied to the page and saved before it is captured — Craft autosaves drafts as
+     * you go, but relying on that would lose whatever was typed in the last moment before
+     * saving, which is precisely when people type the thing they came to change.
      */
     public function actionSaveContent(): Response
     {
         $this->requireManagePermission();
         $this->requirePostRequest();
 
+        $request = Craft::$app->getRequest();
         $plugin = PageTemplates::getInstance();
-        $draftId = (int)Craft::$app->getRequest()->getRequiredBodyParam('draftId');
-        $record = $plugin->contentEditing->recordForDraft($draftId);
+        // **Always elementId, never draftId.** Craft's element editor posts a `draftId` of its
+        // own — the row in the `drafts` table — while a scratch page is identified here by its
+        // *element* id. Reading `draftId` looks right, matches on nothing, and 404s on a request
+        // that is in every other way correct.
+        $scratchId = (int)$request->getRequiredBodyParam('elementId');
+        $record = $plugin->contentEditing->recordForDraft($scratchId);
 
         if ($record === null) {
             throw new NotFoundHttpException('That page is not editing a template.');
         }
 
         $draft = Entry::find()
-            ->id($draftId)
+            ->id($scratchId)
             ->siteId($record->siteId)
             ->status(null)
             ->drafts(null)
@@ -286,6 +297,21 @@ class TemplatesController extends Controller
 
         if ($draft === null) {
             throw new NotFoundHttpException('Page not found.');
+        }
+
+        if ($request->getBodyParam('fields') !== null) {
+            // SCENARIO_ESSENTIALS, as the page was produced under: a template is allowed to hold
+            // partial content, and validating it as though it were going live would refuse to
+            // save a perfectly good template because a required field is blank.
+            $draft->setFieldValuesFromRequest('fields');
+            $draft->setScenario(Element::SCENARIO_ESSENTIALS);
+
+            if (!Craft::$app->getElements()->saveElement($draft)) {
+                return $this->asFailure(
+                    Craft::t('page-templates', 'Couldn’t save the page.'),
+                    ['errors' => $draft->getErrors()],
+                );
+            }
         }
 
         try {
@@ -303,13 +329,13 @@ class TemplatesController extends Controller
             return $this->asFailure($e->getMessage());
         }
 
-        Craft::$app->getSession()->setNotice(
-            Craft::t('page-templates', 'Updated the content of “{name}”.', ['name' => $template->name]),
-        );
+        $redirect = UrlHelper::cpUrl("page-templates/$template->id");
 
-        return $this->asSuccess(data: [
-            'redirect' => UrlHelper::cpUrl("page-templates/$template->id"),
-        ]);
+        return $this->asSuccess(
+            Craft::t('page-templates', 'Updated the content of “{name}”.', ['name' => $template->name]),
+            ['redirect' => $redirect],
+            $redirect,
+        );
     }
 
     /**
@@ -321,8 +347,9 @@ class TemplatesController extends Controller
         $this->requirePostRequest();
 
         $plugin = PageTemplates::getInstance();
-        $draftId = (int)Craft::$app->getRequest()->getRequiredBodyParam('draftId');
-        $record = $plugin->contentEditing->recordForDraft($draftId);
+        // elementId, not draftId — see the note in actionSaveContent().
+        $scratchId = (int)Craft::$app->getRequest()->getRequiredBodyParam('elementId');
+        $record = $plugin->contentEditing->recordForDraft($scratchId);
 
         if ($record === null) {
             throw new NotFoundHttpException('That page is not editing a template.');

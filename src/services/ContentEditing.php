@@ -72,9 +72,13 @@ class ContentEditing extends Component
             } elseif ($existing->userId !== null && $existing->userId !== $userId) {
                 $who = Craft::$app->getUsers()->getUserById($existing->userId);
 
+                // Actionable, because the alternative is a curator staring at a refusal with no
+                // idea what to do: the session ends when that person saves or discards their
+                // page, and the page itself is garbage-collected if they never come back.
                 throw new InvalidArgumentException(sprintf(
                     'Somebody else is already editing this template’s content (%s). '
-                        . 'Two people editing it at once would mean one of them losing their work.',
+                        . 'Two people editing it at once would mean one of them losing their work. '
+                        . 'It becomes available again when they save or discard their changes.',
                     $who?->friendlyName ?? 'another user',
                 ));
             } else {
