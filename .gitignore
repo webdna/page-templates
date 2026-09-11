@@ -32,6 +32,10 @@ config.codekit3
 prepros-6.config
 
 # TESTS
+# tests/.env is tracked on purpose, despite the .env rule above. It is not a secret: it holds
+# DDEV's default database credentials and a fixed key for the throwaway test database, which
+# Craft's test framework drops on every run. Codeception needs it present to connect at all.
+!/tests/.env
 /tests/_output
 /tests/_support/_generated
 .phpunit.result.cache
