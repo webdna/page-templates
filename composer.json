@@ -1,73 +1,64 @@
 {
-    "name": "webdna/page-templates",
-    "description": "Save a built page as a reusable template, and start future pages from it.",
-    "type": "craft-plugin",
-    "keywords": [
-        "cms",
-        "craftcms",
-        "yii2",
-        "templates",
-        "page-templates",
-        "content",
-        "entries",
-        "matrix"
-    ],
-    "license": "proprietary",
-    "authors": [
-        {
-            "name": "WebDNA",
-            "homepage": "https://webdna.co.uk"
-        }
-    ],
-    "support": {
-        "email": "hello@webdna.co.uk",
-        "issues": "https://github.com/webdna/page-templates/issues",
-        "source": "https://github.com/webdna/page-templates",
-        "docs": "https://github.com/webdna/page-templates/blob/main/README.md"
-    },
-    "require": {
-        "php": ">=8.2",
-        "craftcms/cms": "^5.11.0"
-    },
-    "require-dev": {
-        "codeception/codeception": "^5.2.0",
-        "codeception/module-asserts": "^3.0.0",
-        "craftcms/ecs": "dev-main",
-        "craftcms/phpstan": "dev-main"
-    },
-    "autoload": {
-        "psr-4": {
-            "webdna\\pagetemplates\\": "src/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "webdna\\pagetemplates\\tests\\": "tests/"
-        }
-    },
-    "extra": {
-        "handle": "page-templates",
-        "name": "Page Templates",
-        "developer": "WebDNA",
-        "developerUrl": "https://webdna.co.uk",
-        "documentationUrl": "https://github.com/webdna/page-templates/blob/main/README.md",
-        "changelogUrl": "https://raw.githubusercontent.com/webdna/page-templates/main/CHANGELOG.md",
-        "class": "webdna\\pagetemplates\\PageTemplates"
-    },
-    "scripts": {
-        "check-cs": "ecs check --ansi",
-        "fix-cs": "ecs check --ansi --fix",
-        "phpstan": "phpstan --memory-limit=1G",
-        "test": "codecept run"
-    },
-    "config": {
-        "sort-packages": true,
-        "platform": {
-            "php": "8.2"
-        },
-        "allow-plugins": {
-            "craftcms/plugin-installer": true,
-            "yiisoft/yii2-composer": true
-        }
-    }
+	"name": "webdna/page-templates",
+	"description": "Save a built page as a reusable template, and start future pages from it.",
+	"type": "craft-plugin",
+	"keywords": [
+		"craft",
+		"cms",
+		"craftcms",
+		"craft-plugin",
+		"page-templates",
+		"templates",
+		"entries"
+	],
+	"support": {
+		"docs": "https://github.com/webdna/page-templates",
+		"issues": "https://github.com/webdna/page-templates/issues"
+	},
+	"license": "proprietary",
+	"authors": [
+		{
+			"name": "WebDNA",
+			"homepage": "https://webdna.co.uk"
+		}
+	],
+	"require": {
+		"craftcms/cms": "^5.11.0"
+	},
+	"require-dev": {
+		"codeception/codeception": "^5.2.0",
+		"codeception/module-asserts": "^3.0.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"webdna\\pagetemplates\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"webdna\\pagetemplates\\tests\\": "tests/"
+		}
+	},
+	"extra": {
+		"name": "Page Templates",
+		"handle": "page-templates",
+		"developer": "WebDNA",
+		"developerUrl": "https://webdna.co.uk",
+		"documentationUrl": "https://github.com/webdna/page-templates",
+		"changelogUrl": "https://raw.githubusercontent.com/webdna/page-templates/main/CHANGELOG.md",
+		"class": "webdna\\pagetemplates\\PageTemplates"
+	},
+	"scripts": {
+		"test": "codecept run"
+	},
+	"config": {
+		"sort-packages": true,
+		"platform": {
+			"php": "8.2"
+		},
+		"allow-plugins": {
+			"craftcms/plugin-installer": true,
+			"yiisoft/yii2-composer": true
+		}
+	}
 }
