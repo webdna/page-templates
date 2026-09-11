@@ -32,6 +32,9 @@ config.codekit3
 prepros-6.config
 
 # TESTS
+# Craft's test framework copies the host project's config/project into the test install on every
+# run (see projectConfig.folder in codeception.yml). It is generated output, not a fixture.
+/tests/_craft/config/project/
 # tests/.env is tracked on purpose, despite the .env rule above. It is not a secret: it holds
 # DDEV's default database credentials and a fixed key for the throwaway test database, which
 # Craft's test framework drops on every run. Codeception needs it present to connect at all.
