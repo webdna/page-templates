@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## 1.0.0 - 2026-09-11
+## 1.0.0-beta - 2026-09-11
 ### Added
 - Save a page as a reusable template from that page's own actions menu, carrying its content or just its layout
 - Templates offered from Craft's existing **New entry** button, filtered to those that apply to the section and that the editor may use

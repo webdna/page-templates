@@ -16,6 +16,10 @@ Install the plugin either via the plugin store or via composer:
 
 `composer require webdna/page-templates && php craft plugin/install page-templates`
 
+While this is a pre-release, Composer will not resolve it under the default `stable` minimum, so ask for the beta explicitly:
+
+`composer require webdna/page-templates:^1.0@beta && php craft plugin/install page-templates`
+
 
 ## Overview
 
