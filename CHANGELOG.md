@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## 1.0.0 - 2026-10-19
+### Changed
+- Licensed under the Craft License.
+- First stable release.
+
 ## 1.0.0-beta - 2026-09-11
 ### Added
 - Save a page as a reusable template from that page's own actions menu, carrying its content or just its layout
