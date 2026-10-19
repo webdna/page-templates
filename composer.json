@@ -18,7 +18,7 @@
 	"license": "proprietary",
 	"authors": [
 		{
-			"name": "WebDNA",
+			"name": "webdna",
 			"homepage": "https://webdna.co.uk"
 		}
 	],
@@ -42,7 +42,7 @@
 	"extra": {
 		"name": "Page Templates",
 		"handle": "page-templates",
-		"developer": "WebDNA",
+		"developer": "webdna",
 		"developerUrl": "https://webdna.co.uk",
 		"documentationUrl": "https://github.com/webdna/page-templates",
 		"changelogUrl": "https://raw.githubusercontent.com/webdna/page-templates/main/CHANGELOG.md",
