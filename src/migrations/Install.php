@@ -8,7 +8,7 @@ use craft\db\Table;
 /**
  * Install migration.
  *
- * Three tables, all dropped again by safeDown (BR-23). See section 4 of
+ * Four tables, all dropped again by safeDown (BR-23). See section 4 of
  * docs/specs/2026-09-09-page-templates-engine.md for why the shape is what it is — in short,
  * sections and entry types are referenced by **UID rather than id**, because applying project
  * config can delete and recreate one with the same uid and a new id, which would silently
@@ -19,6 +19,7 @@ class Install extends Migration
     private const TEMPLATES = '{{%pagetemplates_templates}}';
     private const TEMPLATE_SECTIONS = '{{%pagetemplates_template_sections}}';
     private const EDITING = '{{%pagetemplates_editing}}';
+    private const INCOMPLETE = '{{%pagetemplates_incomplete}}';
 
     /**
      * @inheritdoc
@@ -121,6 +122,21 @@ class Install extends Migration
         $this->addForeignKey(null, self::EDITING, ['siteId'], Table::SITES, ['id'], 'SET NULL');
         $this->addForeignKey(null, self::EDITING, ['userId'], Table::USERS, ['id'], 'SET NULL');
 
+        // What a page made from a template failed to reproduce, kept with that page until it is
+        // first saved or discarded (BR-44). Shaped by m261020_000000_incomplete_pages.
+        $this->createTable(self::INCOMPLETE, [
+            'id' => $this->primaryKey(),
+            'elementId' => $this->integer()->notNull(),
+            'templateName' => $this->string()->notNull(),
+            'lostDetail' => $this->text(),
+            'dateCreated' => $this->dateTime()->notNull(),
+            'dateUpdated' => $this->dateTime()->notNull(),
+            'uid' => $this->uid(),
+        ]);
+
+        $this->createIndex(null, self::INCOMPLETE, ['elementId'], true);
+        $this->addForeignKey(null, self::INCOMPLETE, ['elementId'], Table::ELEMENTS, ['id'], 'CASCADE');
+
         return true;
     }
 
@@ -130,6 +146,7 @@ class Install extends Migration
     public function safeDown(): bool
     {
         // Dependent tables first: their foreign keys point at the templates table.
+        $this->dropTableIfExists(self::INCOMPLETE);
         $this->dropTableIfExists(self::EDITING);
         $this->dropTableIfExists(self::TEMPLATE_SECTIONS);
         $this->dropTableIfExists(self::TEMPLATES);

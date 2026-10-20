@@ -13,6 +13,7 @@ use craft\models\Section;
 use webdna\pagetemplates\exceptions\UnsupportedSnapshotVersionException;
 use webdna\pagetemplates\models\PageTemplate;
 use webdna\pagetemplates\models\Reproduction;
+use webdna\pagetemplates\records\IncompletePageRecord;
 use webdna\pagetemplates\records\PageTemplateRecord;
 use webdna\pagetemplates\records\PageTemplateSectionRecord;
 use yii\base\Component;
@@ -178,6 +179,64 @@ class Templates extends Component
     private function emptiedFields(array $intendedFields, Entry $entry): array
     {
         return $this->snapshots()->lostValues($intendedFields, $entry->getSerializedFieldValues());
+    }
+
+    /**
+     * Keeps what a page failed to reproduce with that page, so the warning is there on every view
+     * until it is first saved or discarded (BR-44). A faithful page writes nothing.
+     *
+     * Called for pages made with the From template button only: a scratch page carries its own
+     * notice in `pagetemplates_editing` (BR-30).
+     */
+    public function rememberIncomplete(Reproduction $reproduction, PageTemplate $template): void
+    {
+        if ($reproduction->isFaithful() || $reproduction->entry->id === null) {
+            return;
+        }
+
+        $record = IncompletePageRecord::findOne(['elementId' => $reproduction->entry->id])
+            ?? new IncompletePageRecord();
+        $record->elementId = $reproduction->entry->id;
+        $record->templateName = $template->name;
+        $record->lostDetail = Json::encode([
+            'droppedBlockTypes' => $reproduction->droppedBlockTypes,
+            'emptiedFields' => $reproduction->emptiedFields,
+        ]);
+        $record->save(false);
+    }
+
+    /**
+     * What a page failed to reproduce, if it is still waiting to be told.
+     *
+     * @return array{templateName: string, droppedBlockTypes: string[], emptiedFields: string[]}|null
+     */
+    public function incompleteFor(int $elementId): ?array
+    {
+        $record = IncompletePageRecord::findOne(['elementId' => $elementId]);
+
+        if ($record === null) {
+            return null;
+        }
+
+        try {
+            $lost = Json::decode((string)$record->lostDetail) ?? [];
+        } catch (\Throwable) {
+            $lost = [];
+        }
+
+        return [
+            'templateName' => $record->templateName,
+            'droppedBlockTypes' => $lost['droppedBlockTypes'] ?? [],
+            'emptiedFields' => $lost['emptiedFields'] ?? [],
+        ];
+    }
+
+    /**
+     * Clears the warning once the page is first saved or discarded (BR-45).
+     */
+    public function forgetIncomplete(int $elementId): void
+    {
+        Db::delete(IncompletePageRecord::tableName(), ['elementId' => $elementId]);
     }
 
     /**

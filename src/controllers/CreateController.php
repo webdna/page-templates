@@ -20,10 +20,11 @@ use yii\web\Response;
 class CreateController extends Controller
 {
     /**
-     * The session flash key carrying what could not be reproduced, keyed by the new page's id.
+     * The session flash key 1.0 carried what could not be reproduced in.
      *
-     * A flash rather than a query parameter: it survives the redirect Craft's button performs,
-     * cannot be forged by editing the URL, and disappears once seen.
+     * @deprecated in 1.1.0. Neither written nor read: a flash disappeared after one view, so a
+     * reload lost the only notice (issue #2). What was lost is now kept with the page —
+     * see Templates::rememberIncomplete().
      */
     public const INCOMPLETE_FLASH_PREFIX = 'page-templates-incomplete-';
 
@@ -82,18 +83,10 @@ class CreateController extends Controller
             return $this->asFailure($e->getMessage());
         }
 
-        // BR-10. Anything the engine could not reproduce is carried to the new page rather than
-        // dropped here, so the editor sees it in the context of the page it concerns.
-        if (!$result->isFaithful()) {
-            Craft::$app->getSession()->setFlash(
-                self::INCOMPLETE_FLASH_PREFIX . $result->entry->id,
-                [
-                    'templateName' => $template->name,
-                    'droppedBlockTypes' => $result->droppedBlockTypes,
-                    'emptiedFields' => $result->emptiedFields,
-                ],
-            );
-        }
+        // BR-10, BR-44. Anything the engine could not reproduce is kept with the new page rather
+        // than dropped here, so the editor sees it in the context of the page it concerns — on
+        // every view, until the page is first saved or discarded.
+        $plugin->templates->rememberIncomplete($result, $template);
 
         return $this->asSuccess(data: [
             // Named as Craft names it, so the button can treat this response like the stock one.

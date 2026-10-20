@@ -130,7 +130,7 @@ One phase; the four issues are independent but share `Templates`/`Snapshots`, so
 
 - [x] **1.1 Nested lost values (#1)** — `src/services/Snapshots.php`, `src/services/Templates.php`, `tests/unit/SnapshotsTest.php`, `tests/integration/DegradedTemplatesTest.php`
       Rules: BR-40–43 · Verify: TS-1, TS-2, TS-6
-- [ ] **1.2 Persistent warning (#2)** — `src/migrations/{Install,m261020_000000_incomplete_pages}.php`, `src/records/IncompletePageRecord.php`, `src/services/Templates.php`, `src/controllers/CreateController.php`, `src/PageTemplates.php` (schemaVersion 1.1.0, the two clearing listeners), `tests/integration/IncompletePagesTest.php`
+- [x] **1.2 Persistent warning (#2)** — `src/migrations/{Install,m261020_000000_incomplete_pages}.php`, `src/records/IncompletePageRecord.php`, `src/services/Templates.php`, `src/controllers/CreateController.php`, `src/PageTemplates.php` (schemaVersion 1.1.0, the two clearing listeners), `tests/integration/IncompletePagesTest.php`
       Rules: BR-44, BR-45 · Verify: TS-3, TS-7
 - [ ] **1.3 Warning inside the layout (#3)** — `src/PageTemplates.php`, `src/templates/_warning.twig`
       Rules: BR-46 · Verify: TS-8

@@ -8,8 +8,12 @@ use craft\base\Plugin as BasePlugin;
 use craft\controllers\ElementsController;
 use craft\elements\Entry;
 use craft\events\DefineMenuItemsEvent;
+use craft\events\DraftEvent;
+use craft\events\ElementEvent;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\events\RegisterUrlRulesEvent;
+use craft\services\Drafts;
+use craft\services\Elements;
 use craft\services\UserPermissions;
 use craft\web\UrlManager;
 use craft\helpers\Json;
@@ -18,7 +22,6 @@ use craft\helpers\UrlHelper;
 use craft\web\View;
 use webdna\pagetemplates\assetbundles\EntryEditAsset;
 use webdna\pagetemplates\assetbundles\EntryIndexAsset;
-use webdna\pagetemplates\controllers\CreateController;
 use webdna\pagetemplates\services\Access;
 use webdna\pagetemplates\services\ContentEditing;
 use webdna\pagetemplates\services\Snapshots;
@@ -66,7 +69,7 @@ class PageTemplates extends BasePlugin
      */
     public const PERMISSION_MANAGE = 'accessPlugin-page-templates';
 
-    public string $schemaVersion = '1.0.0';
+    public string $schemaVersion = '1.1.0';
 
     /**
      * Deliberately false, and not an oversight: a plugin settings page writes through
@@ -175,6 +178,32 @@ class PageTemplates extends BasePlugin
 
             return null;
         });
+
+        // BR-45. The warning stays with a page until it is first saved — an unpublished draft is
+        // its own canonical, so it keeps its id when applied — or discarded. Craft's garbage
+        // collection of abandoned drafts is covered by the table's foreign key. Only an
+        // unpublished draft can hold a warning, so every other save and delete costs nothing.
+        Event::on(
+            Drafts::class,
+            Drafts::EVENT_AFTER_APPLY_DRAFT,
+            function(DraftEvent $event): void {
+                if ($event->draft->id !== null) {
+                    $this->templates->forgetIncomplete($event->draft->id);
+                }
+            },
+        );
+
+        Event::on(
+            Elements::class,
+            Elements::EVENT_AFTER_DELETE_ELEMENT,
+            function(ElementEvent $event): void {
+                $element = $event->element;
+
+                if ($element instanceof Entry && $element->id !== null && $element->getIsUnpublishedDraft()) {
+                    $this->templates->forgetIncomplete($element->id);
+                }
+            },
+        );
 
         Event::on(
             UrlManager::class,
@@ -421,15 +450,14 @@ JS,
             return null;
         }
 
-        $session = Craft::$app->getSession();
-        $key = CreateController::INCOMPLETE_FLASH_PREFIX . $element->id;
+        $warning = $this->templates->incompleteFor($element->id);
 
-        if (!$session->hasFlash($key)) {
+        if ($warning === null) {
             return null;
         }
 
         return Craft::$app->getView()->renderTemplate('page-templates/_warning', [
-            'warning' => $session->getFlash($key),
+            'warning' => $warning,
         ]);
     }
 
