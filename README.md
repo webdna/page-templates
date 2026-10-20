@@ -34,13 +34,50 @@ There are no new screens for editors to learn: templates are saved from a page's
 
 **Using one.** Create a page as you normally would. The **New entry** button gains a *From template* group listing the templates available for that area. Pick one and you land on a new, unsaved page, already assembled. The group appears once a specific section is selected — on *All entries* there is no single section whose templates could be offered.
 
-If any part of a template could not be reproduced, the new page says so and names what is missing before you save. A page that is not a complete copy never looks like one.
+If any part of a template could not be reproduced, the new page says so at the top of its content and names what is missing — a value inside a block by its path, such as `blocks › imageBlock › image`. The warning stays on the page, through reloads and return visits, until it is first saved or discarded. A page that is not a complete copy never looks like one.
 
 **Editing a template's content.** Open the template and choose **Edit content**. The template opens as a page in Craft's own editor, so every field behaves as it does anywhere else; only the title, the save button and the **Discard** beside it differ. Choose **Save template** to keep the changes. Pages already made from the template are not affected.
 
 A layout-only template has no content to edit. If the page produced from a template is not a complete copy of it, it says so on opening and refuses to be saved back — doing so would permanently lose whatever could not be reproduced. Saving it as a new template is still offered. Only one person can edit a given template's content at a time.
 
 **Curating.** The **Page Templates** section lists every template with its state, and is where you rename them, reorder them (the order editors are offered them in), widen where they may be used, and delete them. Deleting a template never affects pages already made from it.
+
+
+## Configuration
+
+A layout-only template empties every field. If your blocks keep their look in a field of their own — layout, spacing, tone, columns — list it in `config/page-templates.php` and layout-only templates keep its values, at every depth, while everything else still arrives empty:
+
+```php
+<?php
+
+return [
+    // Field classes (subclasses included) or field handles.
+    'keepInLayoutOnly' => [
+        \modules\fields\BlockDesignField::class,
+        'lightswitchHandle',
+    ],
+];
+```
+
+This applies to templates saved after the change; templates already saved are not rewritten. With nothing listed, layout-only templates are exactly as before.
+
+For anything a list cannot say, decide per value with an event. `$event->path` is the chain of handles to the value (field, block type, field…), and `$event->keep` arrives set from the config:
+
+```php
+use webdna\pagetemplates\events\KeepValueEvent;
+use webdna\pagetemplates\services\Snapshots;
+use yii\base\Event;
+
+Event::on(
+    Snapshots::class,
+    Snapshots::EVENT_DEFINE_KEPT_VALUE,
+    function(KeepValueEvent $event) {
+        if (str_starts_with($event->handle, 'option')) {
+            $event->keep = true;
+        }
+    },
+);
+```
 
 
 ## Permissions

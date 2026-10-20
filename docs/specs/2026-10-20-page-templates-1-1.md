@@ -137,7 +137,7 @@ One phase; the four issues are independent but share `Templates`/`Snapshots`, so
       *Built 20 Oct 2026.* **TS-7 and TS-8 (browser) are owed**: signing the session in to craft5's CP was refused, so they wait for a signed-in pass. TS-6's and TS-7's server halves were run in craft5 against an "Issue 1 repro" template (68): `["blocks › imageBlock › image"]`, still there on a second read, cleared by `applyDraft()` and by a delete.
 - [x] **1.4 keepInLayoutOnly (#4)** — `src/models/Settings.php`, `src/events/KeepValueEvent.php`, `src/services/Snapshots.php`, `src/services/Templates.php`, `src/PageTemplates.php`, tests as TS-4/5
       Rules: BR-47–50 · Verify: TS-4, TS-5, TS-9
-- [ ] **1.5 Release notes** — `README.md` (config + event), `CHANGELOG.md` (1.1.0, unreleased), `composer.json` untouched (version comes from the tag)
+- [x] **1.5 Release notes** — `README.md` (config + event), `CHANGELOG.md` (1.1.0, unreleased), `composer.json` untouched (version comes from the tag)
       Verify: B5
 
 ---
