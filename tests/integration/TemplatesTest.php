@@ -6,6 +6,7 @@ use Codeception\Test\Unit;
 use Craft;
 use craft\elements\Entry;
 use craft\elements\User;
+use craft\fields\PlainText;
 use webdna\pagetemplates\PageTemplates;
 use webdna\pagetemplates\records\PageTemplateSectionRecord;
 
@@ -154,5 +155,55 @@ class TemplatesTest extends Unit
             (int)PageTemplateSectionRecord::find()->where(['templateId' => $id])->count(),
             'and so are its allowed-area rows',
         );
+    }
+
+    /**
+     * Issue #4, BR-47, BR-50. keepInLayoutOnly names a field class or a handle; a layout-only
+     * capture keeps that field's values at the top of the page and inside its blocks, and a class
+     * that does not exist is ignored.
+     */
+    public function testALayoutOnlyCaptureKeepsTheConfiguredFields(): void
+    {
+        $plugin = PageTemplates::getInstance();
+        $settings = $plugin->getSettings();
+        $before = $settings->keepInLayoutOnly;
+
+        $source = $this->page('Designed page', [
+            'heading' => 'Top',
+            'blocks' => [
+                'new1' => ['type' => 'textBlock', 'enabled' => true, 'fields' => [
+                    'heading' => 'Nested',
+                    'body' => '<p>Copy</p>',
+                ]],
+            ],
+        ]);
+
+        try {
+            $settings->keepInLayoutOnly = [PlainText::class, 'Not\\A\\Real\\FieldClass'];
+            $byClass = $plugin->templates->captureFromEntry($source, 'By class', null, false)->snapshot;
+            $block = array_values($byClass['blocks'])[0]['fields'];
+
+            $this->assertSame('Top', $byClass['heading'], 'kept at the top of the page');
+            $this->assertSame('Nested', $block['heading'], 'and inside a block');
+            $this->assertNull($block['body'], 'while every other field is emptied');
+
+            $settings->keepInLayoutOnly = ['body'];
+            $byHandle = $plugin->templates->captureFromEntry($source, 'By handle', null, false)->snapshot;
+            $block = array_values($byHandle['blocks'])[0]['fields'];
+
+            $this->assertNull($byHandle['heading']);
+            $this->assertSame('<p>Copy</p>', $block['body']);
+
+            $settings->keepInLayoutOnly = [];
+            $plain = $plugin->templates->captureFromEntry($source, 'Default', null, false)->snapshot;
+
+            $this->assertSame(
+                $plugin->snapshots->stripContent($source->getSerializedFieldValues()),
+                $plain,
+                'nothing configured: exactly 1.0\'s layout-only capture (BR-49)',
+            );
+        } finally {
+            $settings->keepInLayoutOnly = $before;
+        }
     }
 }

@@ -3,6 +3,7 @@
 namespace webdna\pagetemplates\services;
 
 use craft\helpers\Json;
+use webdna\pagetemplates\events\KeepValueEvent;
 use webdna\pagetemplates\exceptions\UnsupportedSnapshotVersionException;
 use yii\base\Component;
 
@@ -31,18 +32,27 @@ class Snapshots extends Component
     public const PATH_SEPARATOR = ' › ';
 
     /**
+     * Raised for each field value in a layout-only capture, deciding whether it is kept (BR-48).
+     *
+     * @see KeepValueEvent
+     */
+    public const EVENT_DEFINE_KEPT_VALUE = 'defineKeptValue';
+
+    /**
      * Captures serialized field values as a snapshot.
      *
      * @param array $fieldValues the output of Entry::getSerializedFieldValues()
      * @param bool $includeContent false for a structure-only template
+     * @param string[] $keepHandles in a structure-only template, the handles whose values are kept
+     *   (BR-47) — resolved by the caller, which has the field layout
      */
-    public function capture(array $fieldValues, bool $includeContent): array
+    public function capture(array $fieldValues, bool $includeContent, array $keepHandles = []): array
     {
         return [
             'version' => self::FORMAT_VERSION,
             'fields' => $includeContent
                 ? $this->withoutUids($fieldValues)
-                : $this->stripContent($fieldValues),
+                : $this->stripContent($fieldValues, $keepHandles),
         ];
     }
 
@@ -171,23 +181,56 @@ class Snapshots extends Component
     }
 
     /**
-     * Empties every field value, leaving only the block structure behind.
+     * Empties every field value, leaving only the block structure behind — except the values a
+     * site has marked as structure (BR-47, BR-48).
+     *
+     * With no handles and no event handler, the output is exactly 1.0's (BR-49).
+     *
+     * @param string[] $keepHandles handles whose values are kept, at any depth
      */
-    public function stripContent(array $fieldValues): array
+    public function stripContent(array $fieldValues, array $keepHandles = []): array
+    {
+        return $this->stripFields($fieldValues, $keepHandles, []);
+    }
+
+    /**
+     * @param string[] $keepHandles
+     * @param string[] $path the handles leading to these fields
+     */
+    private function stripFields(array $fieldValues, array $keepHandles, array $path): array
     {
         $stripped = [];
 
         foreach ($fieldValues as $handle => $value) {
-            $stripped[$handle] = $this->stripValue($value);
+            $here = [...$path, (string)$handle];
+            $keep = in_array((string)$handle, $keepHandles, true);
+
+            if ($this->hasEventHandlers(self::EVENT_DEFINE_KEPT_VALUE)) {
+                $event = new KeepValueEvent([
+                    'handle' => (string)$handle,
+                    'path' => $here,
+                    'value' => $value,
+                    'keep' => $keep,
+                ]);
+                $this->trigger(self::EVENT_DEFINE_KEPT_VALUE, $event);
+                $keep = $event->keep;
+            }
+
+            // A kept value is captured as a with-content capture would capture it (BR-47).
+            $stripped[$handle] = $keep
+                ? $this->withoutUidsInValue($value)
+                : $this->stripValue($value, $keepHandles, $here);
         }
 
         return $stripped;
     }
 
     /**
+     * @param string[] $keepHandles
+     * @param string[] $path
      * @return mixed null for a scalar, [] for a plain array, the emptied block list for a Matrix
      */
-    private function stripValue(mixed $value): mixed
+    private function stripValue(mixed $value, array $keepHandles, array $path): mixed
     {
         if (!is_array($value)) {
             return null;
@@ -199,7 +242,11 @@ class Snapshots extends Component
             return array_map(fn(array $block): array => [
                 'type' => $block['type'],
                 'enabled' => $block['enabled'] ?? true,
-                'fields' => $this->stripContent($block['fields'] ?? []),
+                'fields' => $this->stripFields(
+                    $block['fields'] ?? [],
+                    $keepHandles,
+                    [...$path, (string)$block['type']],
+                ),
             ], $value);
         }
 

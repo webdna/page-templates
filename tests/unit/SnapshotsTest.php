@@ -3,6 +3,7 @@
 namespace webdna\pagetemplates\tests\unit;
 
 use Codeception\Test\Unit;
+use webdna\pagetemplates\events\KeepValueEvent;
 use webdna\pagetemplates\exceptions\UnsupportedSnapshotVersionException;
 use webdna\pagetemplates\services\Snapshots;
 
@@ -391,5 +392,86 @@ class SnapshotsTest extends Unit
                 ['heading' => 'Kept', 'relatedPages' => [], 'text' => null, 'imageshop' => 'null'],
             ),
         );
+    }
+
+    private function layoutPage(): array
+    {
+        return [
+            'heading' => 'Top',
+            'design' => '{"tone":"dark"}',
+            'blocks' => [
+                'b1' => ['type' => 'textBlock', 'enabled' => true, 'uid' => 'u-1', 'fields' => [
+                    'heading' => 'Nested',
+                    'design' => ['columns' => 2, 'spacing' => 'lg'],
+                ]],
+            ],
+        ];
+    }
+
+    /**
+     * Issue #4, BR-47. A kept handle keeps its value at every depth; everything else is emptied.
+     */
+    public function testStripContentKeepsTheNamedHandlesAtEveryDepth(): void
+    {
+        $this->assertSame([
+            'heading' => null,
+            'design' => '{"tone":"dark"}',
+            'blocks' => [
+                'b1' => ['type' => 'textBlock', 'enabled' => true, 'fields' => [
+                    'heading' => null,
+                    'design' => ['columns' => 2, 'spacing' => 'lg'],
+                ]],
+            ],
+        ], $this->snapshots->stripContent($this->layoutPage(), ['design']));
+    }
+
+    /**
+     * BR-48. A handler sees each value with its path and may set keep either way.
+     */
+    public function testAHandlerDecidesWhatIsKept(): void
+    {
+        $seen = [];
+        $this->snapshots->on(Snapshots::EVENT_DEFINE_KEPT_VALUE, function(KeepValueEvent $event) use (&$seen) {
+            $seen[] = implode(Snapshots::PATH_SEPARATOR, $event->path) . ($event->keep ? ' (kept)' : '');
+
+            if ($event->path === ['blocks', 'textBlock', 'heading']) {
+                $event->keep = true;
+            }
+            if ($event->handle === 'design' && count($event->path) === 1) {
+                $event->keep = false;
+            }
+        });
+
+        $stripped = $this->snapshots->stripContent($this->layoutPage(), ['design']);
+
+        $this->assertNull($stripped['design'], 'a handler can drop a configured value');
+        $this->assertSame('Nested', $stripped['blocks']['b1']['fields']['heading'], 'and keep one nobody configured');
+        $this->assertSame([
+            'heading',
+            'design (kept)',
+            'blocks',
+            'blocks › textBlock › heading',
+            'blocks › textBlock › design (kept)',
+        ], $seen);
+    }
+
+    /**
+     * BR-49. With nothing configured and nobody listening, 1.0's output exactly — and a kept
+     * Matrix keeps its blocks' content but never their uids (BR-7).
+     */
+    public function testNothingConfiguredIsUnchangedAndAKeptMatrixLosesItsUids(): void
+    {
+        $this->assertSame(
+            $this->snapshots->stripContent($this->layoutPage()),
+            $this->snapshots->stripContent($this->layoutPage(), []),
+        );
+        $this->assertSame(['heading' => null, 'design' => null], array_intersect_key(
+            $this->snapshots->stripContent($this->layoutPage()),
+            ['heading' => 1, 'design' => 1],
+        ));
+
+        $kept = $this->snapshots->stripContent($this->layoutPage(), ['blocks']);
+        $this->assertSame('Nested', $kept['blocks']['b1']['fields']['heading']);
+        $this->assertArrayNotHasKey('uid', $kept['blocks']['b1']);
     }
 }

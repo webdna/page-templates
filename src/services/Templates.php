@@ -13,6 +13,7 @@ use craft\models\Section;
 use webdna\pagetemplates\exceptions\UnsupportedSnapshotVersionException;
 use webdna\pagetemplates\models\PageTemplate;
 use webdna\pagetemplates\models\Reproduction;
+use webdna\pagetemplates\PageTemplates;
 use webdna\pagetemplates\records\IncompletePageRecord;
 use webdna\pagetemplates\records\PageTemplateRecord;
 use webdna\pagetemplates\records\PageTemplateSectionRecord;
@@ -49,7 +50,11 @@ class Templates extends Component
             );
         }
 
-        $captured = $this->snapshots()->capture($entry->getSerializedFieldValues(), $includeContent);
+        $captured = $this->snapshots()->capture(
+            $entry->getSerializedFieldValues(),
+            $includeContent,
+            $includeContent ? [] : $this->keptHandles($entryType),
+        );
 
         $template = new PageTemplate();
         $template->name = $name;
@@ -237,6 +242,51 @@ class Templates extends Component
     public function forgetIncomplete(int $elementId): void
     {
         Db::delete(IncompletePageRecord::tableName(), ['elementId' => $elementId]);
+    }
+
+    /**
+     * The handles, at every depth of this layout, whose values a layout-only capture keeps (BR-47).
+     *
+     * Resolved here rather than in Snapshots because it needs the fields themselves, and Snapshots
+     * works on serialized values alone (BR-50). Matched against the layout handle — the key the
+     * values arrive under — and the field's original handle, so a project can name either.
+     *
+     * @param string[] $handles collected across nesting levels
+     * @param string[] $visited entry type uids already walked, so a self-nesting Matrix is safe
+     * @return string[]
+     */
+    public function keptHandles(EntryType $entryType, array $handles = [], array &$visited = []): array
+    {
+        $kept = PageTemplates::getInstance()->getSettings()->keepInLayoutOnly;
+
+        if ($kept === [] || in_array($entryType->uid, $visited, true)) {
+            return $handles;
+        }
+
+        $visited[] = $entryType->uid;
+
+        foreach ($entryType->getFieldLayout()->getCustomFields() as $field) {
+            foreach ($kept as $name) {
+                // is_a() also answers false for a class that does not exist, so a stale entry in
+                // the config is ignored rather than fatal.
+                if (
+                    is_a($field, $name) ||
+                    $name === $field->handle ||
+                    $name === $field->layoutElement?->getOriginalHandle()
+                ) {
+                    $handles[] = $field->handle;
+                    break;
+                }
+            }
+
+            if ($field instanceof Matrix) {
+                foreach ($field->getEntryTypes() as $blockType) {
+                    $handles = $this->keptHandles($blockType, $handles, $visited);
+                }
+            }
+        }
+
+        return array_values(array_unique($handles));
     }
 
     /**
@@ -498,6 +548,6 @@ class Templates extends Component
 
     private function snapshots(): Snapshots
     {
-        return \webdna\pagetemplates\PageTemplates::getInstance()->snapshots;
+        return PageTemplates::getInstance()->snapshots;
     }
 }

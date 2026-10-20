@@ -4,6 +4,7 @@ namespace webdna\pagetemplates;
 
 use Craft;
 use craft\base\Element;
+use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
 use craft\controllers\ElementsController;
 use craft\elements\Entry;
@@ -22,6 +23,7 @@ use craft\helpers\UrlHelper;
 use craft\web\View;
 use webdna\pagetemplates\assetbundles\EntryEditAsset;
 use webdna\pagetemplates\assetbundles\EntryIndexAsset;
+use webdna\pagetemplates\models\Settings;
 use webdna\pagetemplates\services\Access;
 use webdna\pagetemplates\services\ContentEditing;
 use webdna\pagetemplates\services\Snapshots;
@@ -35,6 +37,7 @@ use yii\base\Event;
  * Page Templates plugin
  *
  * @method static PageTemplates getInstance()
+ * @method Settings getSettings()
  * @property-read Access $access
  * @property-read ContentEditing $contentEditing
  * @property-read Snapshots $snapshots
@@ -108,6 +111,14 @@ class PageTemplates extends BasePlugin
                 'contentEditing' => ['class' => ContentEditing::class],
             ],
         ];
+    }
+
+    /**
+     * @inheritdoc
+     */
+    protected function createSettingsModel(): ?Model
+    {
+        return new Settings();
     }
 
     /**
