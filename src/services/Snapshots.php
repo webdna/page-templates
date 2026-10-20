@@ -2,6 +2,7 @@
 
 namespace webdna\pagetemplates\services;
 
+use craft\helpers\Json;
 use webdna\pagetemplates\exceptions\UnsupportedSnapshotVersionException;
 use yii\base\Component;
 
@@ -22,6 +23,12 @@ class Snapshots extends Component
      * refuse a version it does not understand instead of guessing and producing a wrong page.
      */
     public const FORMAT_VERSION = 1;
+
+    /**
+     * Joins the handles of a nested field's path for an editor to read (BR-40):
+     * `pageBuilder › blockHeader › siteLogo`.
+     */
+    public const PATH_SEPARATOR = ' › ';
 
     /**
      * Captures serialized field values as a snapshot.
@@ -197,6 +204,130 @@ class Snapshots extends Component
         }
 
         return [];
+    }
+
+    /**
+     * What held content in the prepared snapshot but arrived empty on the page (BR-28, BR-40).
+     *
+     * Walks block lists at every depth, because a relation inside a block whose target has been
+     * deleted leaves the block — and so the Matrix field — non-empty: comparing top-level fields
+     * alone passed such a page off as complete. Blocks are paired by position within one field's
+     * list (BR-41); the prepared list has already lost any dropped block types, so its order is the
+     * order the page was given. A nested loss is reported as a path of handles (BR-40).
+     *
+     * @param array $intended the prepared snapshot's fields, as given to the page
+     * @param array $actual the page's serialized field values after saving
+     * @return string[] top-level handles and nested paths, deduplicated in first-seen order (BR-42)
+     */
+    public function lostValues(array $intended, array $actual): array
+    {
+        $lost = [];
+
+        $this->collectLost($intended, $actual, [], $lost);
+
+        return array_values(array_unique($lost));
+    }
+
+    /**
+     * @param string[] $path the handles leading to these fields
+     * @param string[] $lost collected by reference across every nesting level
+     */
+    private function collectLost(array $intended, array $actual, array $path, array &$lost): void
+    {
+        foreach ($intended as $handle => $value) {
+            // Nothing was meant to arrive — a structure-only template, or a field that was empty
+            // on the example page.
+            if ($this->isEmptyFieldValue($value)) {
+                continue;
+            }
+
+            $here = [...$path, (string)$handle];
+            $arrived = $actual[$handle] ?? null;
+
+            // A field whose every block is gone is one loss, not one per block (BR-41).
+            if ($this->isEmptyFieldValue($arrived)) {
+                $lost[] = implode(self::PATH_SEPARATOR, $here);
+                continue;
+            }
+
+            if (!is_array($value) || !$this->isBlockList($value) || !is_array($arrived)) {
+                continue;
+            }
+
+            $arrivedBlocks = array_values($arrived);
+
+            foreach (array_values($value) as $position => $block) {
+                $blockPath = [...$here, (string)$block['type']];
+                $counterpart = $arrivedBlocks[$position] ?? null;
+
+                // A block that did not arrive, or a different one in its place — either way the
+                // page lacks what this position was meant to hold.
+                if (!is_array($counterpart) || ($counterpart['type'] ?? null) !== $block['type']) {
+                    $lost[] = implode(self::PATH_SEPARATOR, $blockPath);
+                    continue;
+                }
+
+                $this->collectLost(
+                    is_array($block['fields']) ? $block['fields'] : [],
+                    is_array($counterpart['fields'] ?? null) ? $counterpart['fields'] : [],
+                    $blockPath,
+                    $lost,
+                );
+            }
+        }
+    }
+
+    /**
+     * Whether a serialized field value carries no actual content.
+     *
+     * Recursive, and it has to be: some field types normalise an unset value into a populated-
+     * looking structure. ImageShop turns null into a single empty model, which serializes to an
+     * array containing an array of nulls — flatly non-empty, but holding nothing. Treating a
+     * structure whose every leaf is empty as empty is what stops this reporting a field the editor
+     * never filled in.
+     *
+     * `false` and `0` are left alone: they are real values a lightswitch or number field holds.
+     */
+    private function isEmptyFieldValue(mixed $value): bool
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return true;
+        }
+
+        // Some field types serialize to JSON, and a JSON-encoded null or empty structure carries
+        // no content however non-empty the string looks. ImageShop's unset value serializes to the
+        // four-character string "null", which is what made this necessary. The cost is that a
+        // plain-text field containing literally `null` reads as empty here; that is a fair trade
+        // against reporting a field the editor never filled in.
+        if (is_string($value)) {
+            $trimmed = trim($value);
+
+            if ($trimmed === 'null') {
+                return true;
+            }
+
+            if (Json::isJsonObject($trimmed)) {
+                try {
+                    return $this->isEmptyFieldValue(Json::decode($trimmed));
+                } catch (\Throwable) {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        if (!is_array($value)) {
+            return false;
+        }
+
+        foreach ($value as $item) {
+            if (!$this->isEmptyFieldValue($item)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

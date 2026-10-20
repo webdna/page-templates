@@ -83,7 +83,7 @@ Settings model `webdna\pagetemplates\models\Settings`: `keepInLayoutOnly` — `s
 | ID | Rule |
 |---|---|
 | BR-40 | A value that held content in the prepared snapshot and arrived empty is reported **at any depth**. Block lists are walked recursively; a nested loss is reported as a path of handles joined by ` › `: field, block type, field, … (`pageBuilder › blockHeader › siteLogo`). A top-level field is still reported by its bare handle |
-| BR-41 | Blocks are paired **by position** within one field's list: the prepared list (dropped block types already removed) against the page's list, in order. A prepared block with no counterpart on the page is reported as `field › blockType`. A field whose every block is gone is reported by its handle alone, not once per block |
+| BR-41 | Blocks are paired **by position** within one field's list: the prepared list (dropped block types already removed) against the page's list, in order. A prepared block with no counterpart on the page is reported as `field › blockType`. A field whose every block is gone is reported by its handle alone, not once per block. Disabled blocks are absent from both lists — Craft's `Matrix::serializeValue()` omits them on capture and on the new page alike (probed 20 Oct 2026) — so they cannot misalign the pairing |
 | BR-42 | Paths are deduplicated, in first-seen order. Five image blocks missing their image are one problem |
 | BR-43 | The comparison is a pure transform in `Snapshots` — arrays in, a list of paths out — so it is unit-tested without Craft. `Templates` only feeds it |
 | BR-44 | When a page made by the **From template** button is not a complete copy, what was lost is stored against that page (§4), not in the session. Every view of the page's edit screen shows the warning, to anyone who opens it |
@@ -128,7 +128,7 @@ One phase; the four issues are independent but share `Templates`/`Snapshots`, so
 
 ### Tasks
 
-- [ ] **1.1 Nested lost values (#1)** — `src/services/Snapshots.php`, `src/services/Templates.php`, `tests/unit/SnapshotsTest.php`, `tests/integration/DegradedTemplatesTest.php`
+- [x] **1.1 Nested lost values (#1)** — `src/services/Snapshots.php`, `src/services/Templates.php`, `tests/unit/SnapshotsTest.php`, `tests/integration/DegradedTemplatesTest.php`
       Rules: BR-40–43 · Verify: TS-1, TS-2, TS-6
 - [ ] **1.2 Persistent warning (#2)** — `src/migrations/{Install,m261020_000000_incomplete_pages}.php`, `src/records/IncompletePageRecord.php`, `src/services/Templates.php`, `src/controllers/CreateController.php`, `src/PageTemplates.php` (schemaVersion 1.1.0, the two clearing listeners), `tests/integration/IncompletePagesTest.php`
       Rules: BR-44, BR-45 · Verify: TS-3, TS-7

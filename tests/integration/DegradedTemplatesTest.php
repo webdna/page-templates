@@ -234,4 +234,42 @@ class DegradedTemplatesTest extends Unit
         $this->assertFalse($result->isFaithful(), 'and the result must not be passed off as faithful');
         $this->assertSame('Kept', $result->entry->heading, 'while everything reproducible still arrives');
     }
+
+    /**
+     * Issue #1's own repro, BR-40. A relation inside a block whose target no longer exists: the
+     * Matrix field still arrives non-empty, so 1.0 called the page complete. The complete block
+     * ahead of it proves blocks are paired by position, not by the first of a list (BR-41).
+     */
+    public function testALostValueInsideABlockIsReportedByItsPath(): void
+    {
+        $service = PageTemplates::getInstance()->templates;
+        $landing = Craft::$app->getEntries()->getSectionByHandle('landing');
+
+        $source = $this->page('Nested relation', [
+            'heading' => 'Kept',
+            'blocks' => [
+                'new1' => ['type' => 'textBlock', 'enabled' => true, 'fields' => ['heading' => 'Intro']],
+                'new2' => ['type' => 'imageBlock', 'enabled' => true, 'fields' => ['heading' => 'Hero']],
+            ],
+        ]);
+
+        $template = $service->captureFromEntry($source, 'Nested loss', null, true);
+
+        // The issue's quick repro: point the nested relation at an element that does not exist,
+        // which is what a deleted asset leaves behind in a stored snapshot.
+        $snapshot = $template->snapshot;
+        $keys = array_keys($snapshot['blocks']);
+        $snapshot['blocks'][$keys[1]]['fields']['image'] = [99999999];
+        $template->snapshot = $snapshot;
+
+        $result = $service->reproduce($template, $landing, null, User::find()->one()->id);
+
+        $this->assertSame(['blocks › imageBlock › image'], $result->emptiedFields);
+        $this->assertFalse($result->isFaithful());
+        $this->assertSame(
+            ['Intro', 'Hero'],
+            array_map(fn($b) => $b->heading, $result->entry->blocks->all()),
+            'everything else still arrives, in order',
+        );
+    }
 }

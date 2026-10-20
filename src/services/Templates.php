@@ -159,7 +159,8 @@ class Templates extends Component
     }
 
     /**
-     * Field handles that held content in the snapshot but arrived empty on the page (BR-28).
+     * Fields that held content in the snapshot but arrived empty on the page (BR-28), at any depth
+     * (BR-40).
      *
      * The design assumed a field's serialized form always feeds back through its own
      * normalisation, since that is the shape the control panel posts. That is true of Craft's own
@@ -169,81 +170,14 @@ class Templates extends Component
      *
      * Rather than maintain a list of known-lossy field types, this compares what was asked for
      * against what actually landed. It also catches a relation whose target has been deleted since
-     * capture (TN-12), which is the same class of problem: content that cannot be reproduced.
+     * capture (TN-12), which is the same class of problem: content that cannot be reproduced. The
+     * comparison itself is the Snapshots service's, where it is unit-tested (BR-43).
      *
-     * @return string[]
+     * @return string[] handles, and paths for nested values
      */
     private function emptiedFields(array $intendedFields, Entry $entry): array
     {
-        $actual = $entry->getSerializedFieldValues();
-        $emptied = [];
-
-        foreach ($intendedFields as $handle => $intended) {
-            // Nothing was meant to arrive — a structure-only template, or a field that was empty
-            // on the example page.
-            if ($this->isEmptyFieldValue($intended)) {
-                continue;
-            }
-
-            if ($this->isEmptyFieldValue($actual[$handle] ?? null)) {
-                $emptied[] = $handle;
-            }
-        }
-
-        return $emptied;
-    }
-
-    /**
-     * Whether a serialized field value carries no actual content.
-     *
-     * Recursive, and it has to be: some field types normalise an unset value into a populated-
-     * looking structure. ImageShop turns null into a single empty model, which serializes to an
-     * array containing an array of nulls — flatly non-empty, but holding nothing. Treating a
-     * structure whose every leaf is empty as empty is what stops this reporting a field the editor
-     * never filled in.
-     *
-     * `false` and `0` are left alone: they are real values a lightswitch or number field holds.
-     */
-    private function isEmptyFieldValue(mixed $value): bool
-    {
-        if ($value === null || $value === '' || $value === []) {
-            return true;
-        }
-
-        // Some field types serialize to JSON, and a JSON-encoded null or empty structure carries
-        // no content however non-empty the string looks. ImageShop's unset value serializes to the
-        // four-character string "null", which is what made this necessary. The cost is that a
-        // plain-text field containing literally `null` reads as empty here; that is a fair trade
-        // against reporting a field the editor never filled in.
-        if (is_string($value)) {
-            $trimmed = trim($value);
-
-            if ($trimmed === 'null') {
-                return true;
-            }
-
-            if (Json::isJsonObject($trimmed)) {
-                try {
-                    return $this->isEmptyFieldValue(Json::decode($trimmed));
-                } catch (\Throwable) {
-                    return false;
-                }
-            }
-
-            return false;
-        }
-
-        if (!is_array($value)) {
-            return false;
-        }
-
-        foreach ($value as $item) {
-            if (!$this->isEmptyFieldValue($item)) {
-                return false;
-            }
-        }
-
-        return true;
+        return $this->snapshots()->lostValues($intendedFields, $entry->getSerializedFieldValues());
     }
 
     /**

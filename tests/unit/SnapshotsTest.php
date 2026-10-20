@@ -309,4 +309,87 @@ class SnapshotsTest extends Unit
         );
         $this->assertSame([], $prepared['droppedBlockTypes'], 'and nothing is reported as lost');
     }
+
+    /**
+     * Issue #1, BR-40. The Matrix field is still non-empty, so comparing top-level fields alone
+     * reported nothing; the lost image has to be named by its path.
+     */
+    public function testLostValuesNamesANestedLossByItsPath(): void
+    {
+        $lost = $this->snapshots->lostValues(
+            ['blocks' => [['type' => 'imageBlock', 'fields' => ['heading' => 'Hero', 'image' => [101]]]]],
+            ['blocks' => [7 => ['type' => 'imageBlock', 'fields' => ['heading' => 'Hero', 'image' => []]]]],
+        );
+
+        $this->assertSame(['blocks › imageBlock › image'], $lost);
+    }
+
+    public function testLostValuesWalksEveryDepth(): void
+    {
+        $block = fn(string $type, array $fields) => ['type' => $type, 'enabled' => true, 'fields' => $fields];
+
+        $lost = $this->snapshots->lostValues(
+            ['blocks' => [$block('columnsBlock', ['columns' => [$block('column', ['body' => '<p>Kept</p>', 'image' => [5]])]])]],
+            ['blocks' => [$block('columnsBlock', ['columns' => [$block('column', ['body' => '<p>Kept</p>', 'image' => null])]])]],
+        );
+
+        $this->assertSame(['blocks › columnsBlock › columns › column › image'], $lost);
+    }
+
+    /**
+     * BR-41. Blocks pair by position, so the second block's loss is not hidden by the first
+     * block's value, and a block with no counterpart is itself the loss.
+     */
+    public function testLostValuesPairsBlocksByPositionAndReportsAMissingBlock(): void
+    {
+        $lost = $this->snapshots->lostValues(
+            ['blocks' => [
+                ['type' => 'imageBlock', 'fields' => ['image' => [1]]],
+                ['type' => 'imageBlock', 'fields' => ['image' => [2]]],
+                ['type' => 'textBlock', 'fields' => ['heading' => 'Last']],
+            ]],
+            ['blocks' => [
+                ['type' => 'imageBlock', 'fields' => ['image' => [1]]],
+                ['type' => 'imageBlock', 'fields' => ['image' => []]],
+            ]],
+        );
+
+        $this->assertSame(['blocks › imageBlock › image', 'blocks › textBlock'], $lost);
+    }
+
+    /**
+     * BR-41, BR-42. A field whose every block is gone is one loss, and repeated losses of the same
+     * path are one problem.
+     */
+    public function testLostValuesReportsAnEmptiedListOnceAndDeduplicatesPaths(): void
+    {
+        $twoImages = [
+            ['type' => 'imageBlock', 'fields' => ['image' => [1]]],
+            ['type' => 'imageBlock', 'fields' => ['image' => [2]]],
+        ];
+
+        $this->assertSame(['blocks'], $this->snapshots->lostValues(['blocks' => $twoImages], ['blocks' => []]));
+        $this->assertSame(
+            ['blocks › imageBlock › image'],
+            $this->snapshots->lostValues(['blocks' => $twoImages], ['blocks' => [
+                ['type' => 'imageBlock', 'fields' => ['image' => []]],
+                ['type' => 'imageBlock', 'fields' => ['image' => []]],
+            ]]),
+        );
+    }
+
+    /**
+     * 1.0's behaviour, unchanged: a top-level loss is its bare handle, and a value that was empty
+     * in the template is never reported.
+     */
+    public function testLostValuesKeepsTopLevelBehaviour(): void
+    {
+        $this->assertSame(
+            ['relatedPages'],
+            $this->snapshots->lostValues(
+                ['heading' => 'Kept', 'relatedPages' => [9], 'text' => null, 'imageshop' => 'null'],
+                ['heading' => 'Kept', 'relatedPages' => [], 'text' => null, 'imageshop' => 'null'],
+            ),
+        );
+    }
 }
