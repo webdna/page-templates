@@ -134,7 +134,7 @@ One phase; the four issues are independent but share `Templates`/`Snapshots`, so
       Rules: BR-44, BR-45 · Verify: TS-3, TS-7
 - [x] **1.3 Warning inside the layout (#3)** — `src/PageTemplates.php`, `src/templates/_warning.twig`
       Rules: BR-46 · Verify: TS-8
-      *Built 20 Oct 2026.* **TS-7 and TS-8 (browser) are owed**: signing the session in to craft5's CP was refused, so they wait for a signed-in pass. TS-6's and TS-7's server halves were run in craft5 against an "Issue 1 repro" template (68): `["blocks › imageBlock › image"]`, still there on a second read, cleared by `applyDraft()` and by a delete.
+      *Built 20 Oct 2026.* The element editor fills its content in a `prepareScreen` callback that the CP screen formatter runs **after** before-send, so content set in the event is overwritten — the warning is prepended by chaining onto `prepareScreen`. TS-6, TS-7 and TS-8 passed in Chrome on craft5: New entry → From template → "Issue 1 repro" opened with one warning naming `blocks › imageBlock › image`, inside `#content` and not a child of `body`; it was still there on a reload; after **Create entry** the reopened page had no warning and no row.
 - [x] **1.4 keepInLayoutOnly (#4)** — `src/models/Settings.php`, `src/events/KeepValueEvent.php`, `src/services/Snapshots.php`, `src/services/Templates.php`, `src/PageTemplates.php`, tests as TS-4/5
       Rules: BR-47–50 · Verify: TS-4, TS-5, TS-9
 - [x] **1.5 Release notes** — `README.md` (config + event), `CHANGELOG.md` (1.1.0, unreleased), `composer.json` untouched (version comes from the tag)
@@ -199,3 +199,4 @@ Baseline, 20 Oct 2026 before any change: unit OK (15 tests, 26 assertions); inte
 | Date | Version | Change | By |
 |---|---|---|---|
 | 2026-10-20 | 0.1 | First draft, from the triage of 20 Oct 2026 | Claude (with Sam Birch) |
+| 2026-10-20 | 0.2 | All tasks built. BR-41: disabled blocks are absent from both sides; 1.3: the warning chains onto `prepareScreen` (found in the browser pass) | Claude |

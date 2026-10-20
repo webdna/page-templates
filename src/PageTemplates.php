@@ -464,14 +464,32 @@ JS,
             return;
         }
 
-        $existing = $screen->contentHtml;
+        $prepend = function() use ($screen, $warning): void {
+            $existing = $screen->contentHtml;
 
-        $screen->contentHtml = function() use ($existing, $warning): string {
-            $html = is_callable($existing) ? (string)call_user_func($existing) : (string)$existing;
+            $screen->contentHtml = function() use ($existing, $warning): string {
+                $html = is_callable($existing) ? (string)call_user_func($existing) : (string)$existing;
 
-            return Craft::$app->getView()->renderTemplate('page-templates/_warning', [
-                'warning' => $warning,
-            ]) . $html;
+                return Craft::$app->getView()->renderTemplate('page-templates/_warning', [
+                    'warning' => $warning,
+                ]) . $html;
+            };
+        };
+
+        // The element editor fills its content in a prepareScreen callback, which the CP screen
+        // formatter runs *after* this event, so content set here directly is overwritten. The
+        // warning is prepended once Craft's own callback has filled the content in.
+        $prepare = $screen->prepareScreen;
+
+        if ($prepare === null) {
+            $prepend();
+
+            return;
+        }
+
+        $screen->prepareScreen = function(...$args) use ($prepare, $prepend): void {
+            call_user_func_array($prepare, $args);
+            $prepend();
         };
     }
 
