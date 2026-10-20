@@ -150,13 +150,6 @@ class PageTemplates extends BasePlugin
 
     private function attachEventHandlers(): void
     {
-        // BR-10. Craft 5 has no entry-edit content hook — the edit screen is rendered by
-        // ElementsController rather than a hookable template — so the warning is attached to the
-        // one hook every control-panel page fires, and guarded down to the page it concerns.
-        Craft::$app->getView()->hook('cp.layouts.base', function(array &$context): ?string {
-            return $this->renderIncompleteReproductionWarning();
-        });
-
         // BR-31. On a scratch page, Craft's own edit screen is reshaped into the template's:
         // its title, its save button, and a way out. Done on the response rather than with a
         // banner of our own, so the screen keeps Craft's shape and a curator learns nothing new.
@@ -166,6 +159,7 @@ class PageTemplates extends BasePlugin
                 function(Event $event): void {
                     // Before send is before prepare(), and prepare() is what runs the CP screen
                     // formatter — so the behavior can still be changed here.
+                    $this->addIncompleteReproductionWarning($event->sender);
                     $this->adaptScratchPageScreen($event->sender);
                 },
             );
@@ -241,20 +235,6 @@ class PageTemplates extends BasePlugin
         );
     }
 
-    /**
-     * Adds "Save as a page template" to a page's own action menu, where editors already look for
-     * whole-page operations like duplicate and delete.
-     *
-     * The guard matters. getActionMenuItems() also feeds element chips and cards, so without it the
-     * item would appear against every page in every list — Craft's own items guard the same way.
-     */
-    /**
-     * Renders the incomplete-reproduction warning, if the page being viewed has one waiting.
-     *
-     * Guarded tightly: the hook fires on every control-panel page, so this checks that we are on
-     * an element edit screen for an entry that has a flash of its own. Reading the flash consumes
-     * it, so the warning is shown once and does not follow the editor around.
-     */
     /**
      * Reshapes Craft's entry edit screen when the page being edited is a scratch page — one that
      * exists only so a template's content can be edited (BR-31).
@@ -436,29 +416,52 @@ JS,
         ));
     }
 
-    private function renderIncompleteReproductionWarning(): ?string
+    /**
+     * Puts the incomplete-copy warning at the top of the edit screen's own content (BR-46).
+     *
+     * 1.0 rendered it on `cp.layouts.base`, which Craft outputs straight after `<body>`, so it
+     * landed above the sidebar and header (issue #3). Prepending to the screen's content puts it
+     * inside `#content`, above the fields, on every tab — and leaves `noticeHtml` to Craft and to
+     * the scratch-page screen, which both use it.
+     *
+     * Only an unpublished draft can carry a warning (BR-45), so any other screen costs no query.
+     */
+    private function addIncompleteReproductionWarning(Response $response): void
     {
+        /** @var CpScreenResponseBehavior|null $screen */
+        $screen = $response->getBehavior(CpScreenResponseBehavior::NAME);
+
+        if ($screen === null) {
+            return;
+        }
+
         $controller = Craft::$app->controller;
 
         if (!$controller instanceof ElementsController) {
-            return null;
+            return;
         }
 
         $element = $controller->element ?? null;
 
-        if (!$element instanceof Entry || $element->id === null) {
-            return null;
+        if (!$element instanceof Entry || $element->id === null || !$element->getIsUnpublishedDraft()) {
+            return;
         }
 
         $warning = $this->templates->incompleteFor($element->id);
 
         if ($warning === null) {
-            return null;
+            return;
         }
 
-        return Craft::$app->getView()->renderTemplate('page-templates/_warning', [
-            'warning' => $warning,
-        ]);
+        $existing = $screen->contentHtml;
+
+        $screen->contentHtml = function() use ($existing, $warning): string {
+            $html = is_callable($existing) ? (string)call_user_func($existing) : (string)$existing;
+
+            return Craft::$app->getView()->renderTemplate('page-templates/_warning', [
+                'warning' => $warning,
+            ]) . $html;
+        };
     }
 
     /**
@@ -549,6 +552,13 @@ JS,
         Craft::$app->getView()->registerTranslations('page-templates', $messages);
     }
 
+    /**
+     * Adds "Save as a page template" to a page's own action menu, where editors already look for
+     * whole-page operations like duplicate and delete.
+     *
+     * The guard matters. getActionMenuItems() also feeds element chips and cards, so without it the
+     * item would appear against every page in every list — Craft's own items guard the same way.
+     */
     private function addSaveAsTemplateItem(DefineMenuItemsEvent $event): void
     {
         $entry = $event->sender;

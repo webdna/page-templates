@@ -132,8 +132,9 @@ One phase; the four issues are independent but share `Templates`/`Snapshots`, so
       Rules: BR-40–43 · Verify: TS-1, TS-2, TS-6
 - [x] **1.2 Persistent warning (#2)** — `src/migrations/{Install,m261020_000000_incomplete_pages}.php`, `src/records/IncompletePageRecord.php`, `src/services/Templates.php`, `src/controllers/CreateController.php`, `src/PageTemplates.php` (schemaVersion 1.1.0, the two clearing listeners), `tests/integration/IncompletePagesTest.php`
       Rules: BR-44, BR-45 · Verify: TS-3, TS-7
-- [ ] **1.3 Warning inside the layout (#3)** — `src/PageTemplates.php`, `src/templates/_warning.twig`
+- [x] **1.3 Warning inside the layout (#3)** — `src/PageTemplates.php`, `src/templates/_warning.twig`
       Rules: BR-46 · Verify: TS-8
+      *Built 20 Oct 2026.* **TS-7 and TS-8 (browser) are owed**: signing the session in to craft5's CP was refused, so they wait for a signed-in pass. TS-6's and TS-7's server halves were run in craft5 against an "Issue 1 repro" template (68): `["blocks › imageBlock › image"]`, still there on a second read, cleared by `applyDraft()` and by a delete.
 - [ ] **1.4 keepInLayoutOnly (#4)** — `src/models/Settings.php`, `src/events/KeepValueEvent.php`, `src/services/Snapshots.php`, `src/services/Templates.php`, `src/PageTemplates.php`, tests as TS-4/5
       Rules: BR-47–50 · Verify: TS-4, TS-5, TS-9
 - [ ] **1.5 Release notes** — `README.md` (config + event), `CHANGELOG.md` (1.1.0, unreleased), `composer.json` untouched (version comes from the tag)
