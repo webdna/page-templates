@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## Unreleased (1.1.0)
+## 1.1.0 - 2026-10-20
 ### Added
 - `keepInLayoutOnly` config setting: field classes or handles whose values a layout-only template keeps, at every depth (#4)
 - `Snapshots::EVENT_DEFINE_KEPT_VALUE`, to decide per value what a layout-only template keeps (#4)
