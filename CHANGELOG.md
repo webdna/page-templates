@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## 1.1.1 - 2026-10-23
+### Changed
+- New plugin icon: a white glyph on a black circle, with a white icon mask for the control panel nav.
+
 ## 1.1.0 - 2026-10-20
 ### Added
 - `keepInLayoutOnly` config setting: field classes or handles whose values a layout-only template keeps, at every depth (#4)
